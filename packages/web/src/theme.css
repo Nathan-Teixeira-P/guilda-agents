@@ -1,0 +1,51 @@
+/* Tokens from .claude/design/salao.md section 6.1. System fonts only: the server CSP forbids anything external. */
+:root {
+  --noite-0: #0c0809;
+  --noite-1: #160e0f;
+  --noite-2: #241416;
+  --vinho: #5a1a1f;
+  --osso: #ece3d0;
+  --aco: #a9adb3;
+  --bronze: #b08a5a;
+  --ouro: #d4b27a;
+  --sangue: #c1121f;
+  --sangue-texto: #ef5350;
+  --ambar: #d9a441;
+  --verdete: #7fae8a;
+  --pergaminho: #ebdfc4;
+  --tinta: #2a1a17;
+  --tinta-suave: #6b5a4e;
+  --foco: #ece3d0;
+
+  --e-1: 4px; --e-2: 8px; --e-3: 12px; --e-4: 16px; --e-5: 20px; --e-6: 24px; --e-8: 32px; --e-12: 48px;
+  --raio: 2px;
+  --raio-dialogo: 4px;
+
+  --fonte-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fonte-titulo: Georgia, "Times New Roman", serif;
+  --fonte-leitura: Georgia, "Times New Roman", serif;
+  --fonte-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+:root { --manto: #2b2426; --sombra: #000; --veu: rgb(0 0 0 / 0.6); }
+
+/* Light theme (design 6.1): same names, paper values. Contrast AA checked: text tokens >= 4.8:1 on every paper surface. */
+html[data-tema="claro"] {
+  --noite-0: #e9dec3;
+  --noite-1: #f2e9d2;
+  --noite-2: #f8f1de;
+  --vinho: #e8cdc4;
+  --osso: #2a1a17;
+  --aco: #5a4d44;
+  --bronze: #7a5424;
+  --ouro: #6b4710;
+  --sangue-texto: #a3101a;
+  --ambar: #7d5200;
+  --verdete: #2d6a3e;
+  --pergaminho: #fbf5e4;
+  --foco: #2a1a17;
+  --sombra: #6b5a4e;
+  --veu: rgb(42 26 23 / 0.45);
+  color-scheme: light;
+}
+html[data-tema="escuro"] { color-scheme: dark; }
