@@ -1,5 +1,7 @@
 # Guilda de agentes
 
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white) ![React](https://img.shields.io/badge/React-Vite-61DAFB?logo=react&logoColor=black) ![Node](https://img.shields.io/badge/Node-24+-5FA04E?logo=nodedotjs&logoColor=white) ![Claude Code](https://img.shields.io/badge/Claude%20Code-subagentes-D97757)
+
 Hub local que orquestra subagentes do Claude Code em vários projetos. Você descreve a demanda, a Guilda planeja, espera o seu **selo** (aprovação) e só então executa, sempre respeitando o limite do seu plano Claude Pro. O servidor roda só na sua máquina.
 
 ## O que tem
