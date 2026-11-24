@@ -76,3 +76,10 @@ describe("task_progress", () => {
     expect(parseLine(line)).toEqual([{ kind: "subagent-progress", agentId: "a1", subagentType: "explorer", totalTokens: 4777 }]);
   });
 });
+
+describe("result consumption", () => {
+  it("carries num_turns and the token breakdown", () => {
+    const line = JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", total_cost_usd: 0.1, num_turns: 7, usage: { input_tokens: 5, output_tokens: 6, cache_read_input_tokens: 700, cache_creation_input_tokens: 80 }, modelUsage: {}, permission_denials: [] });
+    expect(parseLine(line)[0]).toMatchObject({ kind: "result", numTurns: 7, usage: { input: 5, output: 6, cacheRead: 700, cacheCreation: 80 } });
+  });
+});

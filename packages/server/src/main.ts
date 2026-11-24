@@ -18,6 +18,7 @@ export async function startHub(o: { hubDir?: string; port?: number } = {}) {
   const workspacesDir = join(hub, "workspaces");
   mkdirSync(workspacesDir, { recursive: true });
   const server = createServer({
+    agent: process.env["GUILDA_AGENT"] ?? "orchestrator", // the lean orchestrator prompt replaces the default one (~20k tokens less per turn); GUILDA_AGENT= (empty) disables
     runner: runPhase, // real `claude`, spawned without a shell
     store: createStore(join(hub, "missions")),
     registry: createProjectsStore(join(hub, "projects.json")),

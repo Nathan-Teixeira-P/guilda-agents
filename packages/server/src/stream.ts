@@ -31,6 +31,8 @@ export type StreamEvent =
       modelUsage: Record<string, number>; // model -> costUSD
       permissionDenials: { toolName: string; toolInput?: unknown }[];
       sessionId?: string;
+      numTurns?: number;
+      usage?: { input: number; output: number; cacheRead: number; cacheCreation: number }; // session totals reported by the CLI
     }
   | { kind: "desconhecido"; reason: "invalid-json" | "unrecognized"; type?: string };
 
@@ -79,6 +81,8 @@ const Result = z.looseObject({
   terminal_reason: z.string().nullish(),
   result: z.string().nullish(),
   total_cost_usd: z.number().optional(),
+  num_turns: z.number().optional(),
+  usage: z.looseObject({ input_tokens: z.number().default(0), output_tokens: z.number().default(0), cache_read_input_tokens: z.number().default(0), cache_creation_input_tokens: z.number().default(0) }).optional(),
   modelUsage: z.record(z.string(), z.looseObject({ costUSD: z.number().default(0) })).default({}),
   permission_denials: z.array(z.looseObject({ tool_name: z.string(), tool_input: z.unknown().optional() })).default([]),
 });
@@ -166,6 +170,8 @@ export function parseLine(line: string): StreamEvent[] {
         modelUsage: Object.fromEntries(Object.entries(d.modelUsage).map(([k, v]) => [k, v.costUSD])),
         permissionDenials: d.permission_denials.map((p) => ({ toolName: p.tool_name, toolInput: p.tool_input })),
         sessionId: env.data.session_id,
+        ...(d.num_turns !== undefined ? { numTurns: d.num_turns } : {}),
+        ...(d.usage ? { usage: { input: d.usage.input_tokens, output: d.usage.output_tokens, cacheRead: d.usage.cache_read_input_tokens, cacheCreation: d.usage.cache_creation_input_tokens } } : {}),
       },
     ];
   }

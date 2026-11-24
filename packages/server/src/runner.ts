@@ -35,6 +35,7 @@ export interface RunOpts {
   claudeBin?: string;
   now: () => Date;
   onEvent?: (e: StreamEvent) => void;
+  semResume?: boolean; // phase 2 in a fresh session (lean missions): the plan file is enough, no need to reread the phase 1 context
   signal?: AbortSignal; // abort = kill the child and end the mission (`parada`)
 }
 export interface RunOutcome {
@@ -47,6 +48,7 @@ export interface RunOutcome {
   subagentTypes: Record<string, string>; // agent id -> codename (`subagent_type`), sibling of tokensByAgent so old readers still see numbers
   costByModel: Record<string, number>;
   denials: Result["permissionDenials"];
+  consumo?: { turns?: number; input: number; output: number; cacheRead: number; cacheCreation: number }; // measured per phase: where the plan usage goes
 }
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -88,6 +90,7 @@ export function buildArgs(o: RunOpts, sessionId: string): string[] {
   const args = ["-p", o.prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", "dontAsk"];
   if (o.agent) args.push("--agent", o.agent);
   args.push("--max-budget-usd", budget);
+  args.push("--disable-slash-commands"); // missions never use skills; their listing is paid on every call
   if (!/app\.clickup\.com/.test(o.mission["demanda"] as string ?? "")) args.push("--strict-mcp-config"); // no MCP servers (their tool lists are paid on every call); only the ClickUp intake needs one
   const claudeDir = join(project, ".claude");
   const deny = [rulePath(claudeDir)]; // Edit rule also covers Write
@@ -97,8 +100,11 @@ export function buildArgs(o: RunOpts, sessionId: string): string[] {
     args.push("--disallowedTools", "Bash", ...deny);
   } else {
     const sid = o.mission.sessionId;
-    if (!sid) throw new Error("phase 2 needs mission.sessionId from phase 1");
-    args.push("--resume", sid);
+    if (o.semResume) args.push("--session-id", sessionId);
+    else {
+      if (!sid) throw new Error("phase 2 needs mission.sessionId from phase 1");
+      args.push("--resume", sid);
+    }
     const tests = (o.testCommands ?? []).map((c) => {
       if (!validarComando(c)) throw new Error(`unsafe test command: ${c}`); // closed-format allow-list, fails closed
       return `Bash(${c}:*)`;
@@ -120,6 +126,7 @@ function buildArgsRedacao(o: RunOpts, sessionId: string, dir: string): string[] 
   const args = ["-p", o.prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", "dontAsk"];
   if (o.agent) args.push("--agent", o.agent);
   args.push("--max-budget-usd", budget);
+  args.push("--disable-slash-commands");
   args.push("--strict-mcp-config"); // articles use WebSearch/WebFetch, never MCP
   const refs = o.redacao.leitura.map((p) => absPath(p, "reference"));
   const addDirs = refs.map((p) => (statSync(p).isDirectory() ? p : dirname(p)));
@@ -165,8 +172,9 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
     if (!isApproved(missionDir)) throw new Error("approval gate not open: phase 2 refused");
     if (m.stage !== "executando") m = transition(m, "executando", { now: o.now, approved: true });
   }
-  const sessionId = o.phase === 1 ? (m.sessionId ?? randomUUID()) : (m.sessionId ?? "");
-  if (o.phase === 1) m = { ...m, sessionId };
+  const fresca = o.phase === 1 || o.semResume === true;
+  const sessionId = o.phase === 1 ? (m.sessionId ?? randomUUID()) : o.semResume ? randomUUID() : (m.sessionId ?? "");
+  if (fresca) m = { ...m, sessionId };
   const priorCost = m.costUsd;
   const remaining = o.tetoUsd - priorCost;
   let bs: BreakerState = { loops: m.loops, handoffs: m.handoffs }; // seeded from mission.json; loops come from there plus `VOLTA <spec>` lines the orchestrator emits (main agent text)
@@ -196,7 +204,7 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
       for (let i = 0; i < d.calls.local - statsAntes.calls.local; i++) comLocal = recordLocal(comLocal, { via: "local", tokensSaved: i === 0 ? d.tokensSavedEstimate - statsAntes.tokensSavedEstimate : 0 });
       for (let i = 0; i < d.calls.fallback - statsAntes.calls.fallback; i++) comLocal = recordLocal(comLocal, { via: "claude-fallback" });
     }
-    out.mission = { ...comLocal, costUsd: priorCost + budget.totalUsd, tokensByAgent: out.tokensByAgent, subagentTypes: out.subagentTypes, costByModel: out.costByModel, handoffs: bs.handoffs, loops: bs.loops, ...(erroCapa() ? { erroCapa: erroCapa() } : {}) };
+    out.mission = { ...comLocal, costUsd: priorCost + budget.totalUsd, tokensByAgent: out.tokensByAgent, subagentTypes: out.subagentTypes, costByModel: out.costByModel, ...(out.consumo ? { consumo: { ...(comLocal["consumo"] as object | undefined), [String(o.phase)]: out.consumo } } : {}), handoffs: bs.handoffs, loops: bs.loops, ...(erroCapa() ? { erroCapa: erroCapa() } : {}) };
     if (stopped) out.stopped = stopped;
     if (!artigo) {
       mkdirSync(missionDir, { recursive: true });
@@ -277,6 +285,7 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
     } else if (e.kind === "result") {
       out.denials = e.permissionDenials;
       if (e.text !== "" || !out.lastResult) out.lastResult = e;
+      if (e.usage) out.consumo = { ...(e.numTurns !== undefined ? { turns: e.numTurns } : {}), ...e.usage };
       budget = recordResult(budget, { subtype: e.subtype, terminal_reason: e.terminalReason ?? undefined, total_cost_usd: e.costUsd });
       if (Object.keys(e.modelUsage).length > 0) {
         out.costByModel = {};

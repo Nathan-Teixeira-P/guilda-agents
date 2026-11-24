@@ -77,6 +77,14 @@ describe("buildArgs", () => {
     expect(() => mk("/hub/*")).toThrow();
     expect(() => mk("rel")).toThrow();
   });
+  it("passes --disable-slash-commands, and phase 2 with semResume opens a fresh session instead of resuming", () => {
+    const p1 = buildArgs({ ...a(), phase: 1, mission: m0("planejando") }, "s");
+    expect(p1).toContain("--disable-slash-commands");
+    const fresh = buildArgs({ ...a(), phase: 2, semResume: true, mission: m0("aguardando-aprovacao") }, "new-sid");
+    expect(fresh).not.toContain("--resume");
+    expect(fresh.slice(fresh.indexOf("--session-id"), fresh.indexOf("--session-id") + 2)).toEqual(["--session-id", "new-sid"]);
+    expect(buildArgs({ ...a(), phase: 2, mission: { ...m0("aguardando-aprovacao"), sessionId: "sid-1" } }, "x")).toContain("--resume");
+  });
   it("rejects unsafe ids and paths", () => {
     expect(() => buildArgs({ ...a(), phase: 1, mission: { ...m0("planejando"), id: "../x" } }, "s")).toThrow();
     expect(() => buildArgs({ ...a(), phase: 1, projectDir: "/tmp/a*b" }, "s")).toThrow();

@@ -220,7 +220,7 @@ export function createServer(o: ServerOpts) {
       try {
         const out = await o.runner({
           phase, mission: m, projectDir: proj, missionsDir: store.dir, prompt, tetoUsd: teto, now: clock, signal: ac.signal, ...(plano ? { plano } : {}),
-          ...(o.agent ? { agent: o.agent } : {}), ...(phase === 2 ? { testCommands: comandos, ...(o.hubDir ? { hubDir: o.hubDir } : {}) } : {}),
+          ...(o.agent ? { agent: o.agent } : {}), ...(phase === 2 ? { ...(specsOf(m).length === 0 ? { semResume: true } : {}), testCommands: comandos, ...(o.hubDir ? { hubDir: o.hubDir } : {}) } : {}),
           onEvent: (e: StreamEvent) => {
             if (e.kind === "rate-limit") usage.alimentar(e);
             publish("progress", { missionId: m.id, event: e });
