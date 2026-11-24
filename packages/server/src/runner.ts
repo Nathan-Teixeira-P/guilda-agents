@@ -192,12 +192,14 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
     return existsSync(join(dir, "capa.svg")) && !ok ? "render-cover.sh falhou: capa.png não foi gerada (capa.svg foi mantido)" : undefined;
   };
   let to2 = "";
+  let fezTrabalho = false; // phase 2 that never edited a file nor called a subagent did not execute anything
   const finish = (stopped?: string, pt?: string): RunOutcome => {
     const failed = stopped !== undefined || out.lastResult?.isError === true;
     // breaker and budget stops pause (user can resume); user stop, errors and exits are terminal
     const why = stopped === undefined ? undefined : pauseReason(stopped, pt ?? stopped.replace(/^\w+: /, ""));
     const semFontes = artigo && !failed ? motivoRedacao(o) : undefined;
-    const reason = why ?? semFontes;
+    const semExecucao = !artigo && o.phase === 2 && !failed && !fezTrabalho ? "a fase 2 terminou sem executar nada (nenhum subagente nem edição): confira a resposta do agente e retome" : undefined;
+    const reason = why ?? semFontes ?? semExecucao;
     const to = reason ? "pausada" : failed ? "parada" : o.phase === 1 ? "aguardando-aprovacao" : "concluida";
     to2 = to;
     const next = m.stage === to ? m : transition(m, to, { now: o.now, ...(reason ? { reason } : {}) });
@@ -257,9 +259,11 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
     o.onEvent?.(e);
     if (e.kind === "desconhecido") out.unknownLines++;
     else if (e.kind === "subagent-started") {
+      fezTrabalho = true;
       if (e.subagentType) out.subagentTypes[e.agentId] = e.subagentType;
       bs = recordHandoff(bs, o.now);
     } else if (e.kind === "tool") {
+      if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(e.name)) fezTrabalho = true;
       if (e.command && usaLocal(e.command)) chamadasLocal++;
     } else if (e.kind === "text") {
       if (e.agent === MAIN_AGENT) for (const x of e.text.matchAll(/^VOLTA\s+([\w.-]+)\s*$/gm)) bs = recordLoop(bs, x[1]!, o.now);

@@ -18,7 +18,7 @@ Demanda do usuário, projeto alvo e diretório de saída informado na tarefa.
 - Estágios da missão: intake, planejando, aguardando-aprovacao, executando, concluida, parada.
 - Se a demanda for um link do ClickUp (https://app.clickup.com/...), chame antes o `intake` (haiku, só leitura) para gravar `briefing.md` no diretório de saída; sem MCP ou link inválido, trate a demanda como texto colado.
 - Fase 1 só planeja; grave artefatos no diretório de saída informado na tarefa.
-- Fase 2 só começa com o arquivo `approved` presente e válido. Ausente, vazio ou ambíguo: não execute.
+- Fase 2 só começa quando a tarefa diz `Approved`: o servidor já conferiu o selo (o arquivo fica fora do seu alcance, não o procure). Sem esse aviso na tarefa, não execute; com ele, execute o plano ou as specs.
 - Disjuntor: máximo 2 voltas de retrabalho por spec e 8 trocas encadeadas de handoff. Ao estourar, pare (estágio `parada`) e pergunte ao usuário.
 - Voltas: cada vez que devolver uma spec a coder/tester/reviewer para retrabalho, emita antes, em linha própria, exatamente `VOLTA <id-da-spec>` (ex.: `VOLTA 007`); nunca em outro caso. O servidor conta essas linhas para o disjuntor.
 - Fase 2 (código): explorer → coder → tester → security-reviewer (só se o diff tocar entrada, autenticação, segredos, shell, rede ou dependências; peça ao tester a saída filtrada de `npm audit`) → reviewer → refactorer + tester (só com achado concreto). Refatoração sem achado é proibida.

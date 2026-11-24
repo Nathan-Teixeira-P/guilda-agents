@@ -19,7 +19,7 @@ let root: string, project: string, missionsDir: string;
 let mode = "", writeDraft = true, phases: number[], prompts: string[];
 let srv: ReturnType<typeof createServer>, port: number;
 
-const spawn: SpawnFn = (_f, _a, o) => realSpawn(process.execPath, [fake, fixture("stream-basic"), mode], { cwd: o.cwd, stdio: ["ignore", "pipe", "pipe"] });
+const spawn: SpawnFn = (_f, _a, o) => realSpawn(process.execPath, [fake, fixture(String(_a[1] ?? "").startsWith("Approved") ? "stream-subagent" : "stream-basic"), mode], { cwd: o.cwd, stdio: ["ignore", "pipe", "pipe"] });
 const runner = (o: RunOpts) => {
   phases.push(o.phase);
   prompts.push(o.prompt);

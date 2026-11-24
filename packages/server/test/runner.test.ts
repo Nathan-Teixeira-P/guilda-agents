@@ -139,9 +139,17 @@ describe("runPhase", () => {
   it("phase 2 runs with seal and finishes concluida", async () => {
     writeFileSync(join(missionDir, "approved"), '{"approved":true}');
     const m = { ...m0("aguardando-aprovacao"), sessionId: "s" };
-    const out = await runPhase({ ...base(), phase: 2, mission: m }, { spawn: agent("stream-basic") });
+    const out = await runPhase({ ...base(), phase: 2, mission: m }, { spawn: agent("stream-subagent") }); // a subagent ran: real work
     expect(calls[0]?.args).toContain("--resume");
     expect(out.mission.stage).toBe("concluida");
+  });
+
+  it("phase 2 that executed nothing (no subagent, no edit) is paused, not concluida", async () => {
+    writeFileSync(join(missionDir, "approved"), '{"approved":true}');
+    const m = { ...m0("aguardando-aprovacao"), sessionId: "s" };
+    const out = await runPhase({ ...base(), phase: 2, mission: m }, { spawn: agent("stream-basic") });
+    expect(out.mission.stage).toBe("pausada");
+    expect(out.mission.pauseReason).toMatch(/sem executar nada/);
   });
 
   it("budget signal kills the process and pauses the mission", async () => {
