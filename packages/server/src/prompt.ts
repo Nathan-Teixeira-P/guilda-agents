@@ -26,7 +26,7 @@ export function promptFase1(i: Fase1Input): string {
     ...(i.retomada ? ["", `RESUMING. ${out} already holds earlier work. Before anything else, list and read what exists there (handoff, prd, specs), judge what is complete, wrong or missing against the demand, and redo only that. Do not start over.`] : []),
     "",
     "Rules:",
-    `- Only write files under ${out}. Use ${out}/handoff/map.md, ${out}/handoff/plan.md, ${out}/prd/<feature>.prd.md, ${out}/specs/NNN-<name>.spec.md and ${out}/specs/INDEX.md.`,
+    `- Only write files under ${out}. Use ${out}/handoff/briefing.md (the intake briefing, when the demand is a ClickUp link), ${out}/handoff/map.md, ${out}/handoff/plan.md, ${out}/prd/<feature>.prd.md, ${out}/specs/NNN-<name>.spec.md and ${out}/specs/INDEX.md.`,
     "- Pass file paths to agents, never file contents. Tell each agent its output path.",
     "- Subagents cannot create subagents: you call them yourself, one at a time, in this order: explorer, planner, prd-writer, spec-writer, spec-checker. Explorer cannot write files: save its map to the map path yourself.",
     "- First classify the demand. LEAN (docs/README, config, one-file or small change, no UI, no ambiguity): call only explorer (haiku) and write one short plan to the plan path; no planner, PRD, specs or spec-checker. FULL (several modules, UI, ambiguity): the whole chain above, with planner on sonnet unless the demand is clearly large and risky (then pass model opus to planner).",

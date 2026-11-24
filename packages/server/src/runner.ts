@@ -82,6 +82,7 @@ export function missionPaths(o: Pick<RunOpts, "missionsDir" | "mission">) {
 }
 
 /** Missions run without the ponytail plugin (~1.9k tokens per turn); other hooks (rtk, network routes) stay on. */
+const CLICKUP_READ = ["get_task", "get_task_comments", "get_list", "search", "filter_tasks", "get_threaded_comments", "download_task_attachment"].map((t) => `mcp__clickup__clickup_${t}`); // same list as agents/intake.md, read-only
 const NO_PONYTAIL = JSON.stringify({ enabledPlugins: { "ponytail@ponytail": false } });
 
 /** Pure: builds the argv for `claude -p`. Always an explicit --permission-mode; never bypassPermissions. */
@@ -99,7 +100,8 @@ export function buildArgs(o: RunOpts, sessionId: string): string[] {
   const deny = [rulePath(claudeDir)]; // Edit rule also covers Write
   if (o.phase === 1) {
     args.push("--session-id", sessionId, "--add-dir", absPath(staging, "staging"));
-    args.push("--allowedTools", "Read", "Glob", "Grep", rulePath(staging));
+    const clickup = /app\.clickup\.com/.test(o.mission["demanda"] as string ?? "") ? CLICKUP_READ : []; // dontAsk denies anything not allowed: the intake needs these read-only tools
+    args.push("--allowedTools", "Read", "Glob", "Grep", rulePath(staging), ...clickup);
     args.push("--disallowedTools", "Bash", ...deny);
   } else {
     const sid = o.mission.sessionId;

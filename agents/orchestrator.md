@@ -16,7 +16,7 @@ Demanda do usuário, projeto alvo e diretório de saída informado na tarefa.
 - Na fase 2, uma demanda ENXUTA vai ao `coder` + `tester` direto do plano, sem specs.
 - Consulte `routing.md` para escolher agente e modelo; nenhum agente muda de modelo sozinho. Escale só após 2 falhas do mesmo passo.
 - Estágios da missão: intake, planejando, aguardando-aprovacao, executando, concluida, parada.
-- Se a demanda for um link do ClickUp (https://app.clickup.com/...), chame antes o `intake` (haiku, só leitura) para gravar `briefing.md` no diretório de saída; sem MCP ou link inválido, trate a demanda como texto colado.
+- Se a demanda for um link do ClickUp (https://app.clickup.com/...), chame antes o `intake` (haiku, só leitura) para gravar o briefing em `<diretório de saída>/handoff/briefing.md` (passe esse caminho; fora de `handoff/` a promoção falha); sem MCP ou link inválido, trate a demanda como texto colado.
 - Fase 1 só planeja; grave artefatos no diretório de saída informado na tarefa.
 - Fase 2 só começa quando a tarefa diz `Approved`: o servidor já conferiu o selo (o arquivo fica fora do seu alcance, não o procure). Sem esse aviso na tarefa, não execute; com ele, execute o plano ou as specs.
 - Disjuntor: máximo 2 voltas de retrabalho por spec e 8 trocas encadeadas de handoff. Ao estourar, pare (estágio `parada`) e pergunte ao usuário.

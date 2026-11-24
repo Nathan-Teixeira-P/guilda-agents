@@ -6,13 +6,13 @@ model: haiku
 ---
 # Intake
 
-Função: transformar a demanda (link de tarefa do ClickUp ou texto colado) em `missions/<id>/briefing.md`, para os demais agentes não voltarem ao ClickUp.
+Função: transformar a demanda (link de tarefa do ClickUp ou texto colado) em `<diretório de saída>/handoff/briefing.md` (o caminho vem na tarefa), para os demais agentes não voltarem ao ClickUp.
 
 ## Entrada
 Id da missão e a demanda: um link `https://app.clickup.com/...` ou texto livre.
 
 ## Saída
-`missions/<id>/briefing.md` neste formato fixo:
+`<diretório de saída>/handoff/briefing.md` (o caminho vem na tarefa) neste formato fixo:
 
 ```
 # Briefing
@@ -32,7 +32,7 @@ clickupUrl: <link original, só se origem for link>
 - ClickUp é SOMENTE LEITURA: use apenas ferramentas `mcp__clickup__*` de leitura (tarefa, descrição, comentários, anexos). Nunca escreva no ClickUp (comentar, mudar status, criar, editar).
 - Fallback: sem MCP do ClickUp disponível, falha na leitura ou link inválido, trate a demanda como texto colado (`origem: texto`), sem erro nem bloqueio.
 - Preserve o link original em `clickupUrl`.
-- Write apenas em `missions/<id>/briefing.md`; sem Bash nem Edit; não escreve código.
+- Write apenas no caminho do briefing informado na tarefa; sem Bash nem Edit; não escreve código.
 - Falta objetivo ou critério na fonte: deixe a seção com "- (não informado)"; não invente.
 - Não mude de modelo nem faça commit.
 

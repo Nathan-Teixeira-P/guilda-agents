@@ -52,6 +52,12 @@ describe("buildArgs", () => {
     expect(denied).toContain(`Edit(/${join(project, ".claude")}/**)`);
     expect(args).toContain("--max-budget-usd");
   });
+  it("phase 1: ClickUp read tools are allowed only when the demand has a ClickUp link", () => {
+    const com = buildArgs({ ...a(), phase: 1, mission: { ...m0("planejando"), demanda: "ver https://app.clickup.com/t/1/abc" } }, "s");
+    expect(com).toContain("mcp__clickup__clickup_get_task");
+    expect(com).not.toContain("--strict-mcp-config");
+    expect(buildArgs({ ...a(), phase: 1 }, "s")).not.toContain("mcp__clickup__clickup_get_task");
+  });
   it("phase 2: resume, tests allowed, commit/push denied", () => {
     const args = buildArgs({ ...a(), phase: 2, mission: { ...m0("aguardando-aprovacao"), sessionId: "sid-1" }, testCommands: ["npm test"] }, "x");
     expect(args[args.indexOf("--resume") + 1]).toBe("sid-1");
