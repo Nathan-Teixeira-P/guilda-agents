@@ -80,6 +80,7 @@ describe("buildArgs", () => {
   it("passes --disable-slash-commands, and phase 2 with semResume opens a fresh session instead of resuming", () => {
     const p1 = buildArgs({ ...a(), phase: 1, mission: m0("planejando") }, "s");
     expect(p1).toContain("--disable-slash-commands");
+    expect(p1[p1.indexOf("--settings") + 1]).toBe('{"enabledPlugins":{"ponytail@ponytail":false}}');
     const fresh = buildArgs({ ...a(), phase: 2, semResume: true, mission: m0("aguardando-aprovacao") }, "new-sid");
     expect(fresh).not.toContain("--resume");
     expect(fresh.slice(fresh.indexOf("--session-id"), fresh.indexOf("--session-id") + 2)).toEqual(["--session-id", "new-sid"]);

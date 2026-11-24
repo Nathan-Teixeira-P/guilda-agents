@@ -7,7 +7,7 @@ import {
 const KEYS = ["name", "description", "model", "tools"];
 export interface Parsed { data: { name?: string; description?: string; model?: string; tools?: string[] }; body: string }
 
-/** Minimal frontmatter parser: `key: value` lines only; `tools` is comma-separated. */
+/** Minimal frontmatter parser: `key: value` lines only; `tools` is comma-separated (commas inside parentheses, as in `Agent(a,b)`, do not split). */
 export function parseFrontmatter(text: string): Parsed {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
   if (!m) throw new Error("frontmatter missing or unterminated");
@@ -18,7 +18,7 @@ export function parseFrontmatter(text: string): Parsed {
     if (i < 1) throw new Error(`malformed frontmatter line: ${line}`);
     const k = line.slice(0, i).trim(), v = line.slice(i + 1).trim();
     if (!KEYS.includes(k)) throw new Error(`unknown frontmatter key: ${k}`);
-    data[k] = k === "tools" ? v.split(",").map((s) => s.trim()).filter(Boolean) : v;
+    data[k] = k === "tools" ? v.split(/,(?![^()]*\))/).map((s) => s.trim()).filter(Boolean) : v;
   }
   return { data: data as Parsed["data"], body: m[2]! };
 }

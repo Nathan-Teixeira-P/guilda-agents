@@ -81,6 +81,9 @@ export function missionPaths(o: Pick<RunOpts, "missionsDir" | "mission">) {
   return { missionDir, staging: join(missionDir, "out") };
 }
 
+/** Missions run without the ponytail plugin (~1.9k tokens per turn); other hooks (rtk, network routes) stay on. */
+const NO_PONYTAIL = JSON.stringify({ enabledPlugins: { "ponytail@ponytail": false } });
+
 /** Pure: builds the argv for `claude -p`. Always an explicit --permission-mode; never bypassPermissions. */
 export function buildArgs(o: RunOpts, sessionId: string): string[] {
   const project = absPath(o.projectDir, "projectDir");
@@ -90,7 +93,7 @@ export function buildArgs(o: RunOpts, sessionId: string): string[] {
   const args = ["-p", o.prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", "dontAsk"];
   if (o.agent) args.push("--agent", o.agent);
   args.push("--max-budget-usd", budget);
-  args.push("--disable-slash-commands"); // missions never use skills; their listing is paid on every call
+  args.push("--disable-slash-commands", "--settings", NO_PONYTAIL); // missions never use skills; their listing is paid on every call
   if (!/app\.clickup\.com/.test(o.mission["demanda"] as string ?? "")) args.push("--strict-mcp-config"); // no MCP servers (their tool lists are paid on every call); only the ClickUp intake needs one
   const claudeDir = join(project, ".claude");
   const deny = [rulePath(claudeDir)]; // Edit rule also covers Write
@@ -126,7 +129,7 @@ function buildArgsRedacao(o: RunOpts, sessionId: string, dir: string): string[] 
   const args = ["-p", o.prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", "dontAsk"];
   if (o.agent) args.push("--agent", o.agent);
   args.push("--max-budget-usd", budget);
-  args.push("--disable-slash-commands");
+  args.push("--disable-slash-commands", "--settings", NO_PONYTAIL);
   args.push("--strict-mcp-config"); // articles use WebSearch/WebFetch, never MCP
   const refs = o.redacao.leitura.map((p) => absPath(p, "reference"));
   const addDirs = refs.map((p) => (statSync(p).isDirectory() ? p : dirname(p)));
