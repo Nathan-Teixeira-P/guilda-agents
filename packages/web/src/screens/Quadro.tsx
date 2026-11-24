@@ -34,19 +34,22 @@ function Acoes({ m, onChange }: { m: M; onChange: () => void }) {
   );
 }
 
-function Card({ m, projeto, now, onChange }: { m: M; projeto: string; now: number; onChange: () => void }) {
-  const titulo = (m.demanda ?? "").split("\n")[0]?.trim() || "(sem demanda)";
+/** Article (Redação) shown on the board as a card: same stages, links to its own screen, no quick actions. */
+type Item = M & { artigo?: true; titulo?: string };
+
+function Card({ m, projeto, now, onChange }: { m: Item; projeto: string; now: number; onChange: () => void }) {
+  const titulo = m.titulo ?? ((m.demanda ?? "").split("\n")[0]?.trim() || "(sem demanda)");
   const motivo = m.stage === "pausada" ? m.pauseReason : m.stage === "parada" ? m.stopReason : undefined;
   return (
     <li className={`card s-${m.stage}`}>
-      <div className="tit" title={titulo}><a className="cartao-link" href={`#/missao/${encodeURIComponent(m.id)}`}>{titulo}</a></div>
+      <div className="tit" title={titulo}><a className="cartao-link" href={`#/${m.artigo ? "redacao" : "missao"}/${encodeURIComponent(m.id)}`}>{titulo}</a></div>
       <div className="meta">
         <span>{projeto}</span>
         <span>{formatDesde(m.updatedAt, now)}</span>
         <span className="muted" title="Custo de tabela, apenas informativo">US$ {m.costUsd.toFixed(2)} info</span>
       </div>
       {motivo && <p className="motivo"><strong>{m.stage === "pausada" ? "Motivo da pausa" : "Motivo"}:</strong> {motivo}</p>}
-      <Acoes m={m} onChange={onChange} />
+      {!m.artigo && <Acoes m={m} onChange={onChange} />}
     </li>
   );
 }
@@ -54,8 +57,12 @@ function Card({ m, projeto, now, onChange }: { m: M; projeto: string; now: numbe
 export function Quadro({ live }: { live: Live }) {
   const now = useNow();
   const mobile = useMedia("(max-width: 639px)");
-  const { missions, projects, loading, error } = live;
-  const groups = useMemo(() => groupByStage(missions), [missions]);
+  const { projects, loading, error, artigos } = live;
+  const missions = useMemo<Item[]>(() => [
+    ...live.missions,
+    ...artigos.map((a): Item => ({ id: a.id, project: "Redação", stage: a.stage, costUsd: a.costUsd, createdAt: a.createdAt, updatedAt: a.updatedAt, ...(a.pauseReason ? { pauseReason: a.pauseReason } : {}), ...(a.stopReason ? { stopReason: a.stopReason } : {}), artigo: true, titulo: `✎ ${a.tema || (a.pedido?.modo === "sugerir" ? "Sugestões de temas" : a.id)}` })),
+  ], [live.missions, artigos]);
+  const groups = useMemo(() => groupByStage(missions) as Record<Stage, Item[]>, [missions]);
   const nome = (id: string) => projects.find((p) => p.id === id)?.nome ?? id;
   const firstNonEmpty = URGENCY.find((s) => groups[s].length > 0) ?? "aguardando-aprovacao";
   const [aba, setAba] = useState<Stage>();
@@ -134,7 +141,7 @@ export function Quadro({ live }: { live: Live }) {
               {lista.length === 0 ? (
                 <p className="col-vazia">{s === "aguardando-aprovacao" ? "Nada aguardando seu selo." : "Nada por aqui."}</p>
               ) : (
-                <ul className="cards">{lista.map((m) => <Card key={m.id} m={m} projeto={nome(m.project)} now={now} onChange={live.reload} />)}</ul>
+                <ul className="cards">{lista.map((m) => <Card key={m.id} m={m} projeto={m.artigo ? "Redação" : nome(m.project)} now={now} onChange={live.reload} />)}</ul>
               )}
               {s === "concluida" && todas.length > MAX_CONCLUIDAS && <p className="hint">Mostrando as {MAX_CONCLUIDAS} últimas de {todas.length}.</p>}
             </section>

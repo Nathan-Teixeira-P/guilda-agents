@@ -156,14 +156,14 @@ export function montarPedido(f: FormRedacao): { ok: true; pedido: PedidoRedacao 
   const erros: Record<string, string> = {};
   const tema = f.tema.trim();
   if (f.modo === "definido" && !tema) erros["tema"] = "Diga o tema do artigo.";
-  const palavras = Number(f.palavras);
-  if (f.palavras.trim() === "" || !Number.isInteger(palavras) || palavras < 200 || palavras > 5000) erros["palavras"] = "Informe de 200 a 5000 palavras.";
+  const palavras = f.modo === "definido" ? Number(f.palavras) : 1200; // suggestions have no length: the field is hidden
+  if (f.modo === "definido" && f.palavras.trim() === "" || !Number.isInteger(palavras) || palavras < 200 || palavras > 5000) erros["palavras"] = "Informe de 200 a 5000 palavras.";
   if (f.idioma.trim().length < 2) erros["idioma"] = "Informe o idioma, por exemplo pt-BR.";
   const referencias = f.referencias.map((r) => ({ tipo: r.tipo, valor: r.valor.trim() })).filter((r) => r.valor);
   const ruim = referencias.find((r) => (r.tipo === "url" && !linkSeguroHttp(r.valor)) || (r.tipo === "caminho" && !r.valor.startsWith("/")));
   if (ruim) erros["referencias"] = ruim.tipo === "url" ? `Link inválido (use http:// ou https://): ${ruim.valor}` : `O caminho deve ser absoluto (começa com /): ${ruim.valor}`;
   if (Object.keys(erros).length) return { ok: false, erros };
-  const pedido: PedidoRedacao = { modo: f.modo, palavras, idioma: f.idioma.trim(), ...(tema ? { tema } : {}), ...(f.publico.trim() ? { publico: f.publico.trim() } : {}), ...(f.tom.trim() ? { tom: f.tom.trim() } : {}), ...(referencias.length ? { referencias } : {}) };
+  const pedido: PedidoRedacao = { modo: f.modo, palavras, idioma: f.idioma.trim(), ...(tema ? { tema } : {}), ...(f.modo === "definido" && f.publico.trim() ? { publico: f.publico.trim() } : {}), ...(f.modo === "definido" && f.tom.trim() ? { tom: f.tom.trim() } : {}), ...(referencias.length ? { referencias } : {}) };
   return { ok: true, pedido };
 }
 const linkSeguroHttp = (u: string) => /^https?:\/\/\S+$/i.test(u);

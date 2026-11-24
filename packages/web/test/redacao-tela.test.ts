@@ -67,8 +67,9 @@ describe("pedido", () => {
     expect(montarPedido(FORM_VAZIO)).toEqual({ ok: true, pedido: { modo: "sugerir", palavras: 1200, idioma: "pt-BR" } });
   });
   it("valida palavras 200..5000 e idioma", () => {
-    for (const p of ["199", "5001", "12.5", ""]) expect(montarPedido({ ...FORM_VAZIO, palavras: p })).toMatchObject({ ok: false, erros: { palavras: expect.any(String) } });
+    for (const p of ["199", "5001", "12.5", ""]) expect(montarPedido({ ...FORM_VAZIO, modo: "definido", tema: "x", palavras: p })).toMatchObject({ ok: false, erros: { palavras: expect.any(String) } });
     expect(montarPedido({ ...FORM_VAZIO, idioma: "p" })).toMatchObject({ ok: false });
+    expect(montarPedido({ ...FORM_VAZIO, palavras: "" })).toMatchObject({ ok: true }); // suggestions hide the length field
   });
   it("monta referências, descarta vazias e recusa link/caminho inválidos", () => {
     const r = montarPedido({ ...FORM_VAZIO, modo: "definido", tema: " Cache ", publico: "devs", referencias: [{ tipo: "url", valor: "https://a.dev/x" }, { tipo: "texto", valor: " " }, { tipo: "caminho", valor: "/tmp/a.md" }] });

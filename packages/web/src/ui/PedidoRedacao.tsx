@@ -76,11 +76,11 @@ export function PedidoRedacao({ live, inicial, onCriado }: { live: Live; inicial
       </div>
 
       <details className="rd-avancado">
-        <summary>Opções avançadas</summary>
+        <summary>{definido ? "Opções do artigo (público, tom, tamanho)" : "Opções da pesquisa (idioma, fontes de apoio)"}</summary>
         <div className="rd-grade">
-          <div className="field"><label htmlFor={`${id}-pub`}>Público</label><input id={`${id}-pub`} type="text" value={f.publico} onChange={(e) => mudar({ publico: e.target.value })} placeholder="Ex.: devs júnior" /></div>
-          <div className="field"><label htmlFor={`${id}-tom`}>Tom</label><input id={`${id}-tom`} type="text" value={f.tom} onChange={(e) => mudar({ tom: e.target.value })} placeholder="Ex.: didático, direto" /></div>
-          <div className="field"><label htmlFor={`${id}-pal`}>Palavras</label><input id={`${id}-pal`} type="number" inputMode="numeric" min={200} max={5000} step={100} value={f.palavras} onChange={(e) => mudar({ palavras: e.target.value })} aria-invalid={tentou && !!erros["palavras"]} aria-describedby={`${id}-pal-h`} /><p id={`${id}-pal-h`} className={tentou && erros["palavras"] ? "err" : "hint"}>{tentou && erros["palavras"] ? erros["palavras"] : "De 200 a 5000. Padrão: 1200."}</p></div>
+          {definido && <div className="field"><label htmlFor={`${id}-pub`}>Público</label><input id={`${id}-pub`} type="text" value={f.publico} onChange={(e) => mudar({ publico: e.target.value })} placeholder="Ex.: devs júnior" /></div>}
+          {definido && <div className="field"><label htmlFor={`${id}-tom`}>Tom</label><input id={`${id}-tom`} type="text" value={f.tom} onChange={(e) => mudar({ tom: e.target.value })} placeholder="Ex.: didático, direto" /></div>}
+          {definido && <div className="field"><label htmlFor={`${id}-pal`}>Palavras</label><input id={`${id}-pal`} type="number" inputMode="numeric" min={200} max={5000} step={100} value={f.palavras} onChange={(e) => mudar({ palavras: e.target.value })} aria-invalid={tentou && !!erros["palavras"]} aria-describedby={`${id}-pal-h`} /><p id={`${id}-pal-h`} className={tentou && erros["palavras"] ? "err" : "hint"}>{tentou && erros["palavras"] ? erros["palavras"] : "De 200 a 5000. Padrão: 1200."}</p></div>}
           <div className="field"><label htmlFor={`${id}-idi`}>Idioma</label><input id={`${id}-idi`} type="text" value={f.idioma} onChange={(e) => mudar({ idioma: e.target.value })} aria-invalid={tentou && !!erros["idioma"]} />{tentou && erros["idioma"] && <p className="err">{erros["idioma"]}</p>}</div>
         </div>
         <fieldset className="rd-refs">
