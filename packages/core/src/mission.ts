@@ -7,7 +7,7 @@ export const STAGES = [
   "planejando",
   "aguardando-aprovacao",
   "executando",
-  "pausada", // resumable by the user; `parada` is the terminal stop
+  "pausada", // resumable by the user; `parada` can also be resumed explicitly
   "concluida",
   "parada",
 ] as const;
@@ -45,7 +45,7 @@ const NEXT: Record<Stage, readonly Stage[]> = {
   executando: ["concluida", "pausada", "parada"],
   pausada: ["planejando", "executando", "parada"],
   concluida: [],
-  parada: [],
+  parada: ["planejando", "executando"], // a recolhida can be taken up again by the user (the caller decides the phase)
 };
 
 export function newMission(id: string, project: string, now: () => Date): Mission {

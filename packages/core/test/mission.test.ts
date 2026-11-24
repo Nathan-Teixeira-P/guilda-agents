@@ -61,8 +61,12 @@ describe("pausada", () => {
   it.each(["concluida", "aguardando-aprovacao", "intake", "pausada"] as const)("pausada -> %s throws", (to) =>
     expect(() => transition(paused("executando"), to, { now, approved: true })).toThrow(/invalid/),
   );
-  it("parada stays terminal", () =>
-    expect(() => transition(at("parada"), "executando", { now, approved: true })).toThrow(/invalid/));
+  it("parada can be taken up again, but never skips the gate or completes", () => {
+    expect(transition(at("parada"), "planejando", { now }).stage).toBe("planejando");
+    expect(() => transition(at("parada"), "executando", { now })).toThrow(/gate/);
+    expect(transition(at("parada"), "executando", { now, approved: true }).stage).toBe("executando");
+    expect(() => transition(at("parada"), "concluida", { now })).toThrow(/invalid/);
+  });
 });
 
 describe("gate enforcement", () => {
@@ -81,7 +85,6 @@ describe("invalid transitions", () => {
     ["planejando", "executando"],
     ["executando", "planejando"],
     ["concluida", "executando"],
-    ["parada", "planejando"],
   ] as const)("%s -> %s throws", (from, to) =>
     expect(() => transition(at(from), to, { now, approved: true })).toThrow(/invalid/),
   );

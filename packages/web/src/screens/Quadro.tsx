@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { api } from "../api.ts";
+import { erroDeAcao } from "../logic/erros.ts";
 import { go } from "../router.ts";
 import { groupByStage, STAGE_LABEL, STAGE_ORDER, URGENCY, type M, type Stage } from "../logic/stages.ts";
 import { formatDesde } from "../logic/time.ts";
@@ -6,7 +8,33 @@ import { useMedia, useNow, type Live } from "../store.ts";
 
 const MAX_CONCLUIDAS = 10;
 
-function Card({ m, projeto, now }: { m: M; projeto: string; now: number }) {
+/** Quick actions on the card: Pausar (stays where it is), Parar (recolhe) and Retomar. */
+function Acoes({ m, onChange }: { m: M; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [erro, setErro] = useState<string>();
+  const ativa = m.stage === "planejando" || m.stage === "executando";
+  if (!ativa && m.stage !== "pausada" && m.stage !== "parada") return null;
+  async function agir(f: () => ReturnType<typeof api.stop>) {
+    setBusy(true); setErro(undefined);
+    const r = await f();
+    setBusy(false);
+    if (!r.ok) setErro(erroDeAcao(r));
+    onChange();
+  }
+  const parar = () => { if (window.confirm("Parar e recolher a missão? Você pode retomá-la depois.")) void agir(() => api.stop(m.id)); };
+  return (
+    <>
+      <div className="row" style={{ marginTop: "var(--e-3)" }}>
+        {ativa && <button type="button" className="btn chico" disabled={busy} onClick={() => void agir(() => api.pause(m.id))}>❚❚ Pausar</button>}
+        {(m.stage === "pausada" || m.stage === "parada") && <button type="button" className="btn chico primario" disabled={busy} onClick={() => void agir(() => api.resume(m.id))}>▶ Retomar</button>}
+        {m.stage !== "parada" && <button type="button" className="btn chico perigo" disabled={busy} onClick={parar}>■ Parar</button>}
+      </div>
+      {erro && <p className="err" role="alert">{erro}</p>}
+    </>
+  );
+}
+
+function Card({ m, projeto, now, onChange }: { m: M; projeto: string; now: number; onChange: () => void }) {
   const titulo = (m.demanda ?? "").split("\n")[0]?.trim() || "(sem demanda)";
   const motivo = m.stage === "pausada" ? m.pauseReason : m.stage === "parada" ? m.stopReason : undefined;
   return (
@@ -18,6 +46,7 @@ function Card({ m, projeto, now }: { m: M; projeto: string; now: number }) {
         <span className="muted" title="Custo de tabela, apenas informativo">US$ {m.costUsd.toFixed(2)} info</span>
       </div>
       {motivo && <p className="motivo"><strong>{m.stage === "pausada" ? "Motivo da pausa" : "Motivo"}:</strong> {motivo}</p>}
+      <Acoes m={m} onChange={onChange} />
     </li>
   );
 }
@@ -105,7 +134,7 @@ export function Quadro({ live }: { live: Live }) {
               {lista.length === 0 ? (
                 <p className="col-vazia">{s === "aguardando-aprovacao" ? "Nada aguardando seu selo." : "Nada por aqui."}</p>
               ) : (
-                <ul className="cards">{lista.map((m) => <Card key={m.id} m={m} projeto={nome(m.project)} now={now} />)}</ul>
+                <ul className="cards">{lista.map((m) => <Card key={m.id} m={m} projeto={nome(m.project)} now={now} onChange={live.reload} />)}</ul>
               )}
               {s === "concluida" && todas.length > MAX_CONCLUIDAS && <p className="hint">Mostrando as {MAX_CONCLUIDAS} últimas de {todas.length}.</p>}
             </section>

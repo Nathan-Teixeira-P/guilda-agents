@@ -76,6 +76,7 @@ export const api = {
   resume: (id: string, comment?: string) => call<{ mission: M }>("POST", `/missions/${encodeURIComponent(id)}/resume`, comment ? { comment } : {}),
   editMission: (id: string, b: { demanda?: string; tetoPp?: number | null; tetoSemanaPp?: number | null }) => call<{ mission: M }>("PATCH", `/missions/${encodeURIComponent(id)}`, b),
   deleteMission: (id: string) => call<{ removed: string }>("DELETE", `/missions/${encodeURIComponent(id)}`),
+  pause: (id: string) => call<{ mission: M }>("POST", `/missions/${encodeURIComponent(id)}/pause`, {}),
   stop: (id: string) => call<{ mission: M }>("POST", `/missions/${encodeURIComponent(id)}/stop`, {}),
   localStatus: () => call<LocalStatus>("GET", "/local/status"),
   localStats: () => call<LocalStats>("GET", "/local/stats"),

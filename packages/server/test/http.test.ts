@@ -126,6 +126,19 @@ describe("flow", () => {
     expect((await call("POST", `/missions/${id}/adjust`, { comment: "x" })).status).toBe(409);
     await call("POST", `/missions/${id}/stop`);
   });
+  it("pause parks a running mission with a user reason; resume audits what exists", async () => {
+    mode = "hang";
+    const id = await create();
+    await until(id, "planejando");
+    const r = await call("POST", `/missions/${id}/pause`);
+    expect(r.status).toBe(200);
+    expect(r.json.mission).toMatchObject({ stage: "pausada", pauseReason: "pausada pelo usuário", pausedFrom: "planejando" });
+    expect((await call("POST", `/missions/${id}/pause`)).status).toBe(409);
+    mode = "";
+    expect((await call("POST", `/missions/${id}/resume`, {})).status).toBe(202);
+    expect(prompts.at(-1)).toMatch(/RESUMING/);
+    await until(id, "aguardando-aprovacao");
+  });
   it("adjust reopens phase 1 with the comment", async () => {
     const id = await create();
     await until(id, "aguardando-aprovacao");
@@ -221,15 +234,18 @@ describe("pause and resume", () => {
     expect(phases).toEqual([2]);
     expect(prompts[0]).toContain("keep going");
   });
-  it("stop on a paused mission ends it in parada, and parada cannot resume", async () => {
+  it("stop on a paused mission ends it in parada, and a recolhida can be resumed (phase 1: unsealed)", async () => {
     seed("p-stop", "planejando", false);
     await srv.close();
     await boot();
     const r = await call("POST", "/missions/p-stop/stop");
     expect(r.status).toBe(200);
     expect(r.json.mission.stage).toBe("parada");
-    expect((await call("POST", "/missions/p-stop/resume", {})).status).toBe(409);
-    expect(phases).toEqual([]);
+    const back = await call("POST", "/missions/p-stop/resume", {});
+    expect(back.status).toBe(202);
+    expect(back.json.mission.stage).toBe("planejando");
+    expect(back.json.mission.stopReason).toBeUndefined();
+    expect(phases).toEqual([1]);
   });
 });
 

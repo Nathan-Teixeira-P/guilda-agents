@@ -39,6 +39,13 @@ export function Vivo({ m, live, onChange }: { m: M; live: Live; onChange: () => 
   const noFim = useRef(true);
   useEffect(() => { const c = caixa.current; if (c && noFim.current) c.scrollTop = c.scrollHeight; }, [linhas.length]);
 
+  async function pausar() {
+    setBusy(true);
+    const r = await api.pause(m.id);
+    setBusy(false);
+    if (!r.ok) setErro(erroDeAcao(r));
+    onChange();
+  }
   async function parar() {
     setBusy(true);
     const r = await api.stop(m.id);
@@ -56,11 +63,12 @@ export function Vivo({ m, live, onChange }: { m: M; live: Live; onChange: () => 
       {ativa && (
         <div className="row parar-linha">
           <p className="muted">{m.stage === "planejando" ? "Fase 1: reconhecimento e plano" : "Fase 2: execução"}</p>
-          <button type="button" className="btn perigo" onClick={() => setParando(true)} disabled={busy}>■ Parar</button>
+          <button type="button" className="btn" title="Para onde está; retome quando quiser" onClick={() => void pausar()} disabled={busy}>❚❚ Pausar</button>
+          <button type="button" className="btn perigo" title="Encerra o agente e recolhe a missão" onClick={() => setParando(true)} disabled={busy}>■ Parar</button>
         </div>
       )}
       {m.stage === "pausada" && <PausaPanel m={m} onDone={onChange} />}
-      {m.stage === "parada" && <p className="panel aviso field warn" role="status"><strong>Missão recolhida{m.stopReason ? `: ${m.stopReason}` : "."}</strong></p>}
+      {m.stage === "parada" && <PausaPanel m={m} onDone={onChange} />}
       {aviso && <p className="panel aviso field warn" role="status">Aviso: {aviso}</p>}
       {erro && <p className="err field" role="alert">{erro}</p>}
       <div className="vivo">
@@ -101,11 +109,11 @@ export function Vivo({ m, live, onChange }: { m: M; live: Live; onChange: () => 
           </section>
         </aside>
       </div>
-      <ConfirmDialog aberto={parando} titulo="Encerrar a missão e o processo?" onFechar={() => setParando(false)}>
-        <p style={{ margin: "var(--e-3) 0 var(--e-5)" }}>O que já foi feito fica no projeto. A missão não poderá ser retomada.</p>
+      <ConfirmDialog aberto={parando} titulo="Parar e recolher a missão?" onFechar={() => setParando(false)}>
+        <p style={{ margin: "var(--e-3) 0 var(--e-5)" }}>O agente é encerrado e a missão vai para Recolhida. O que já foi feito fica no projeto, e você pode retomá-la depois (com conferência do que foi feito).</p>
         <div className="row">
           <button type="button" className="btn" autoFocus onClick={() => setParando(false)}>Cancelar</button>
-          <button type="button" className="btn perigo" disabled={busy} onClick={parar}>Encerrar</button>
+          <button type="button" className="btn perigo" disabled={busy} onClick={parar}>Recolher</button>
         </div>
       </ConfirmDialog>
     </>

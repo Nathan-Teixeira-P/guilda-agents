@@ -109,7 +109,7 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
   return (
     <>
       {m.stage === "pausada" && <PausaPanel m={m} onDone={onChange} />}
-      {m.stage === "parada" && <p className="panel aviso field warn" role="status"><strong>Missão recolhida{m.stopReason ? `: ${m.stopReason}` : "."}</strong></p>}
+      {m.stage === "parada" && <PausaPanel m={m} onDone={onChange} />}
       {m.stage === "concluida" && <p className="panel field ok" role="status">Missão concluída. O pacote continua disponível para leitura.</p>}
       <div className={`guerra${carimbando ? " tranco" : ""}`}>
         <nav className="indice" aria-label="Pacote da missão">

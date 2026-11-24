@@ -248,7 +248,7 @@ export function createServer(o: ServerOpts) {
       .filter((p): p is string => typeof p === "string" && /^specs\/\d.*\.spec\.md$/.test(p))
       .map((p) => join(projectPath(m) ?? "", ".claude", p));
 
-  const prompt1 = (m: Mission, comment?: string) => {
+  const prompt1 = (m: Mission, comment?: string, retomada = false) => {
     const p = registry.get(m.project);
     return promptFase1({
       demanda: str(m, "demanda"),
@@ -256,6 +256,7 @@ export function createServer(o: ServerOpts) {
       projetoPath: p?.caminho ?? "",
       ...(p ? { notas: lerRetomada(p, store).notes } : {}),
       ...(comment ? { comentario: comment } : {}),
+      ...(retomada ? { retomada } : {}),
     });
   };
 
@@ -736,7 +737,7 @@ export function createServer(o: ServerOpts) {
       launch(planning, 1, prompt1(planning));
       return send(res, 201, { id, mission: planning });
     }
-    const hit = /^\/missions\/([^/]+)(?:\/(approve|adjust|resume|stop))?$/.exec(path);
+    const hit = /^\/missions\/([^/]+)(?:\/(approve|adjust|resume|stop|pause))?$/.exec(path);
     if (!hit) throw new HttpError(404, "not found");
     const [, id = "", action] = hit;
 
@@ -744,7 +745,6 @@ export function createServer(o: ServerOpts) {
       const m = mustGet(id);
       return send(res, 200, { mission: m, package: pack(m), breaker: { loops: m.loops, handoffs: m.handoffs, limits: { maxLoops: MAX_LOOPS_PER_SPEC, maxHandoffs: MAX_CHAINED_HANDOFFS } } });
     }
-    if (method !== "POST" || !action) throw new HttpError(404, "not found");
     if (!action && (method === "PATCH" || method === "DELETE")) {
       const m = mustGet(id);
       if (running.has(id) || m.stage === "planejando" || m.stage === "executando") throw new HttpError(409, `cannot ${method === "PATCH" ? "edit" : "delete"} in stage ${m.stage}: stop it first`);
@@ -762,6 +762,7 @@ export function createServer(o: ServerOpts) {
       save(next);
       return send(res, 200, { mission: next });
     }
+    if (method !== "POST" || !action) throw new HttpError(404, "not found");
 
     if (action === "approve") {
       await json(req, Empty);
@@ -788,21 +789,33 @@ export function createServer(o: ServerOpts) {
     if (action === "resume") {
       const b = await json(req, Resume);
       const m = mustGet(id);
-      if (m.stage !== "pausada" || running.has(id)) throw new HttpError(409, `cannot resume in stage ${m.stage}`);
-      if (m.pausedFrom === "executando") {
+      if ((m.stage !== "pausada" && m.stage !== "parada") || running.has(id)) throw new HttpError(409, `cannot resume in stage ${m.stage}`);
+      // pausada remembers its phase; parada (recolhida) goes back to phase 2 only if it was sealed and has a session
+      const fase2 = m.stage === "pausada" ? m.pausedFrom === "executando" : isApproved(store.dirOf(id)) && !!m.sessionId;
+      const { stopReason: _s, ...limpa } = m;
+      if (fase2) {
         // fail closed: phase 2 only with a valid seal (re-checked by the runner too)
         if (!isApproved(store.dirOf(id))) throw new HttpError(409, "approval gate not open: cannot resume execution");
-        const next = intervene(transition(m, "executando", { now: clock, approved: true }));
+        const next = intervene(transition(limpa as Mission, "executando", { now: clock, approved: true }));
         save(next);
-        launch(next, 2, promptFase2({ specs: specsOf(m), projetoPath: projectPath(m) ?? "", ...(o.hubDir ? { hubDir: o.hubDir } : {}), ...(b.comment ? { comentario: b.comment } : {}) }));
+        launch(next, 2, promptFase2({ specs: specsOf(m), projetoPath: projectPath(m) ?? "", retomada: true, ...(o.hubDir ? { hubDir: o.hubDir } : {}), ...(b.comment ? { comentario: b.comment } : {}) }));
         return send(res, 202, { mission: next });
       }
-      // phase 1 resumes like adjust: fresh session carrying the comment
-      const { sessionId: _drop, ...rest } = transition(m, "planejando", { now: clock });
+      // phase 1 resumes like adjust: fresh session carrying the comment, auditing what was already drafted
+      const { sessionId: _drop, ...rest } = transition(limpa as Mission, "planejando", { now: clock });
       const next = intervene(rest as Mission);
       save(next);
-      launch(next, 1, prompt1(next, b.comment));
+      launch(next, 1, prompt1(next, b.comment, true));
       return send(res, 202, { mission: next });
+    }
+    if (action === "pause") {
+      await json(req, Empty);
+      const m = mustGet(id);
+      const run = running.get(id);
+      if (!run || (m.stage !== "planejando" && m.stage !== "executando")) throw new HttpError(409, `cannot pause in stage ${m.stage}`);
+      run.ac.abort("pause");
+      await run.done;
+      return send(res, 200, { mission: store.get(id) });
     }
     // stop
     await json(req, Empty);

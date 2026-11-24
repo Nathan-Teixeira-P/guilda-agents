@@ -65,14 +65,15 @@ describe("buildArgs", () => {
     const mk = (testCommands?: string[]) => buildArgs({ ...a(), phase: 2, mission: { ...m0("aguardando-aprovacao"), sessionId: "sid-1" }, ...(testCommands ? { testCommands } : {}) }, "x");
     expect(() => mk(["npm test; rm -rf /"])).toThrow();
     expect(() => mk(["ls"])).toThrow();
-    for (const args of [mk(), mk([])]) expect(args.slice(0, args.indexOf("--disallowedTools")).some((x) => x.startsWith("Bash("))).toBe(false);
+    for (const args of [mk(), mk([])]) expect(args.slice(0, args.indexOf("--disallowedTools")).some((x) => x.startsWith("Bash(") && !x.startsWith("Bash(git "))).toBe(false);
   });
   it("phase 2: hub local helper allowed for exactly three subcommands, only with a hub", () => {
     const mk = (hubDir?: string) => buildArgs({ ...a(), phase: 2, mission: { ...m0("aguardando-aprovacao"), sessionId: "sid-1" }, ...(hubDir ? { hubDir } : {}) }, "x");
     const allowed = (l: string[]) => l.slice(l.indexOf("--allowedTools"), l.indexOf("--disallowedTools"));
-    const rules = allowed(mk("/hub")).filter((x) => x.startsWith("Bash("));
+    const rules = allowed(mk("/hub")).filter((x) => x.startsWith("Bash(") && !x.startsWith("Bash(git "));
+    expect(allowed(mk())).toEqual(expect.arrayContaining(["Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)"]));
     expect(rules).toEqual(["Bash(node /hub/scripts/local.ts run:*)", "Bash(node /hub/scripts/local.ts compact-test-log:*)", "Bash(node /hub/scripts/local.ts list-relevant-files:*)"]);
-    expect(allowed(mk()).some((x) => x.startsWith("Bash("))).toBe(false);
+    expect(allowed(mk()).some((x) => x.startsWith("Bash(") && !x.startsWith("Bash(git "))).toBe(false);
     expect(() => mk("/hub/*")).toThrow();
     expect(() => mk("rel")).toThrow();
   });

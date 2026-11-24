@@ -105,7 +105,8 @@ export function buildArgs(o: RunOpts, sessionId: string): string[] {
     });
     const script = o.hubDir ? join(absPath(o.hubDir, "hubDir"), "scripts", "local.ts") : undefined;
     const local = script ? ["run", "compact-test-log", "list-relevant-files"].map((t) => `Bash(node ${script} ${t}:*)`) : [];
-    args.push("--allowedTools", "Read", "Glob", "Grep", rulePath(project), ...tests, ...local);
+    const git = ["status", "diff", "log"].map((c) => `Bash(git ${c}:*)`); // read-only: lets a resumed run audit what was already done
+    args.push("--allowedTools", "Read", "Glob", "Grep", rulePath(project), ...tests, ...local, ...git);
     args.push("--disallowedTools", ...["git commit", "git push", "gh", "curl", "wget", "ssh", "scp"].map((c) => `Bash(${c}:*)`), "WebFetch", ...deny);
   }
   return args;
@@ -119,8 +120,8 @@ function buildArgsRedacao(o: RunOpts, sessionId: string, dir: string): string[] 
   const args = ["-p", o.prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", "dontAsk"];
   if (o.agent) args.push("--agent", o.agent);
   args.push("--max-budget-usd", budget);
-  const refs = o.redacao.leitura.map((p) => absPath(p, "reference"));
   args.push("--strict-mcp-config"); // articles use WebSearch/WebFetch, never MCP
+  const refs = o.redacao.leitura.map((p) => absPath(p, "reference"));
   const addDirs = refs.map((p) => (statSync(p).isDirectory() ? p : dirname(p)));
   const read = [dir, ...refs].map((p) => `Read(/${p}/**)`);
   const allow = ["Glob", "Grep", ...read, rulePath(dir)];
@@ -142,6 +143,7 @@ function buildArgsRedacao(o: RunOpts, sessionId: string, dir: string): string[] 
 
 /** Readable pause reason for stops that should wait for the user; undefined = terminal stop. */
 function pauseReason(stopped: string, pt: string): string | undefined {
+  if (stopped.startsWith("pause: ")) return "pausada pelo usuário";
   if (stopped.startsWith("breaker: ")) return `disjuntor: ${pt}`;
   if (stopped.startsWith("budget: ")) return `teto de uso: ${pt}`;
   if (stopped.startsWith("plan: ")) return `teto de uso do plano: ${pt}`;
@@ -221,10 +223,11 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
     stoppedPt = pt;
     child.kill("SIGKILL");
   };
-  if (o.signal?.aborted) stop("stopped by user");
-  o.signal?.addEventListener("abort", () => stop("stopped by user"), { once: true });
-  let baseline: Ponto | undefined = o.plano?.inicio; // plan-usage baseline (spec 018)
-  let baselineSemana: Ponto | undefined = o.plano?.inicioSemana;
+  const porAbort = () => stop(o.signal?.reason === "pause" ? "pause: pelo usuário" : "stopped by user"); // abort("pause") parks the run instead of ending it
+  if (o.signal?.aborted) porAbort();
+  o.signal?.addEventListener("abort", porAbort, { once: true });
+  let baseline: Ponto | undefined = o.plano?.inicio;
+  let baselineSemana: Ponto | undefined = o.plano?.inicioSemana; // plan-usage baseline (spec 018)
   const tokensByMsg = new Map<string, { agent: string; total: number }>(); // assistant blocks repeat the same message id
   let anon = 0;
   const tripBreaker = () => {
@@ -252,12 +255,12 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
     } else if (e.kind === "usage") {
       const t = e.tokens;
       tokensByMsg.set(e.messageId || `anon-${anon++}`, { agent: e.agent, total: t.input + t.output + t.cacheRead + t.cacheCreation });
-    } else if (e.kind === "subagent-finished" && e.totalTokens !== undefined) {
-      out.tokensByAgent[e.agentId] = Math.max(out.tokensByAgent[e.agentId] ?? 0, e.totalTokens);
-    } else if (e.kind === "rate-limit") {
     } else if (e.kind === "subagent-progress") { // a stopped mission never gets task_notification: progress keeps the per-agent tokens
       if (e.subagentType) out.subagentTypes[e.agentId] ??= e.subagentType;
       if (e.totalTokens !== undefined) out.tokensByAgent[e.agentId] = Math.max(out.tokensByAgent[e.agentId] ?? 0, e.totalTokens);
+    } else if (e.kind === "subagent-finished" && e.totalTokens !== undefined) {
+      out.tokensByAgent[e.agentId] = Math.max(out.tokensByAgent[e.agentId] ?? 0, e.totalTokens);
+    } else if (e.kind === "rate-limit") {
       out.rateLimit = { status: e.status, fiveHour: e.fiveHour, sevenDay: e.sevenDay, seenAt: o.now().toISOString() };
       const snap = o.plano && snapshotDeLimite(e, "");
       if (o.plano && snap) {

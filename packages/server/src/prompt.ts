@@ -8,6 +8,7 @@ export interface Fase1Input {
   briefingPath?: string;
   notas?: string; // project-notes.md, appended capped
   comentario?: string; // user feedback when adjusting a draft
+  retomada?: boolean; // resuming: audit what already exists before continuing
   classe?: string; // optional pre-classification (trivial|media|grande); the orchestrator classifies otherwise
 }
 
@@ -22,6 +23,7 @@ export function promptFase1(i: Fase1Input): string {
     i.demanda,
     ...(i.comentario ? ["", "User feedback on the previous draft:", i.comentario] : []),
     ...(i.notas?.trim() ? ["", "Project notes (truncated):", i.notas.slice(0, NOTES_PROMPT_LIMIT)] : []),
+    ...(i.retomada ? ["", `RESUMING. ${out} already holds earlier work. Before anything else, list and read what exists there (handoff, prd, specs), judge what is complete, wrong or missing against the demand, and redo only that. Do not start over.`] : []),
     "",
     "Rules:",
     `- Only write files under ${out}. Use ${out}/handoff/map.md, ${out}/handoff/plan.md, ${out}/prd/<feature>.prd.md, ${out}/specs/NNN-<name>.spec.md and ${out}/specs/INDEX.md.`,
@@ -37,6 +39,7 @@ export interface Fase2Input {
   specs: string[]; // absolute spec paths
   projetoPath: string;
   comentario?: string; // user comment when resuming a paused run
+  retomada?: boolean; // resuming: audit the project before continuing
   hubDir?: string; // absolute hub folder: tells agents where the log compactor lives (spec 036)
 }
 
@@ -45,6 +48,7 @@ export function promptFase2(i: Fase2Input): string {
     ...(i.specs.length
       ? [`Approved. Phase 2 (execution) in ${i.projetoPath}. Implement these specs in order, one at a time:`, ...i.specs.map((s) => `- ${s}`)]
       : [`Approved. Phase 2 (execution) in ${i.projetoPath}. There are no specs: implement the approved plan at ${i.projetoPath}/.claude/handoff/plan.md.`]),
+    ...(i.retomada ? ["", "RESUMING. Before implementing anything, audit the current state: read the specs/plan, run `git status`, `git diff --stat` and `git log -5` in the project, read the changed files, and run the test commands. For each spec decide: done, partial, missing, or needs change (something done is wrong, outdated, or lost). Report that audit in 10 lines max, then continue only with what is partial, missing or needs change. Do not redo what is done and correct."] : []),
     ...(i.comentario ? ["", "The run was paused; the user resumed it with this comment:", i.comentario, ""] : []),
     "Never commit or push. Pass file paths to agents, never contents. Subagents cannot create subagents.",
     ...(i.hubDir ? [`Test/typecheck/lint output over ~60 lines: save it to a temp file inside ${i.projetoPath} and run \`node ${i.hubDir}/scripts/local.ts compact-test-log <file>\`; read only its stdout (failures are always kept).`] : []),

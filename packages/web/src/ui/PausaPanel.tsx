@@ -4,7 +4,7 @@ import { erroDeAcao } from "../logic/erros.ts";
 import type { M } from "../logic/stages.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 
-/** Paused mission: shows why, lets the user answer and resume, or end it. Failures become messages, never exceptions. */
+/** Paused or recolhida (parada) mission: shows why, lets the user answer and resume, or end it. Failures become messages, never exceptions. */
 export function PausaPanel({ m, onDone }: { m: M; onDone: () => void }) {
   const [comentario, setComentario] = useState("");
   const [busy, setBusy] = useState(false);
@@ -26,11 +26,12 @@ export function PausaPanel({ m, onDone }: { m: M; onDone: () => void }) {
     onDone();
   }
 
+  const parada = m.stage === "parada";
   return (
     <section className="panel aviso field" aria-labelledby="pz-t">
-      <h2 id="pz-t">Missão pausada: aguarda você</h2>
-      <p className="warn" role="alert"><strong>Motivo:</strong> {m.pauseReason ?? "não informado"}</p>
-      <p className="hint">Retomando, a missão continua {m.pausedFrom === "executando" ? "a execução (o selo já foi dado)" : "o reconhecimento do plano"}; o disjuntor zera.</p>
+      <h2 id="pz-t">{parada ? "Missão recolhida" : "Missão pausada: aguarda você"}</h2>
+      <p className="warn" role="alert"><strong>Motivo:</strong> {(parada ? m.stopReason : m.pauseReason) ?? "não informado"}</p>
+      <p className="hint">Ao retomar, o agente primeiro confere tudo o que já foi feito (plano, arquivos e código do projeto), aponta o que ficou faltando ou precisa mudar e só então continua {parada ? "de onde a missão parou" : m.pausedFrom === "executando" ? "a execução (o selo já foi dado)" : "o reconhecimento do plano"}; o disjuntor zera.</p>
       <div className="field" style={{ marginTop: "var(--e-3)" }}>
         <label htmlFor="pz-c">Sua resposta (opcional)</label>
         <textarea id="pz-c" value={comentario} onChange={(e) => setComentario(e.target.value)} maxLength={20000} style={{ minHeight: 96 }} />
@@ -38,13 +39,13 @@ export function PausaPanel({ m, onDone }: { m: M; onDone: () => void }) {
       {erro && <p className="err" role="alert">{erro}</p>}
       <div className="row">
         <button type="button" className="btn primario" disabled={busy} onClick={retomar}>{busy ? "Enviando…" : "Responder e retomar"}</button>
-        <button type="button" className="btn" disabled={busy} onClick={() => setEncerrar(true)}>Encerrar</button>
+        {!parada && <button type="button" className="btn" disabled={busy} onClick={() => setEncerrar(true)}>Parar (recolher)</button>}
       </div>
-      <ConfirmDialog aberto={encerrar} titulo="Encerrar a missão?" onFechar={() => setEncerrar(false)}>
-        <p style={{ margin: "var(--e-3) 0 var(--e-5)" }}>A missão é encerrada de vez e não poderá ser retomada. O que já foi feito fica no projeto.</p>
+      <ConfirmDialog aberto={encerrar} titulo="Recolher a missão?" onFechar={() => setEncerrar(false)}>
+        <p style={{ margin: "var(--e-3) 0 var(--e-5)" }}>A missão vai para Recolhida. O que já foi feito fica no projeto, e você pode retomá-la depois.</p>
         <div className="row">
           <button type="button" className="btn" autoFocus onClick={() => setEncerrar(false)}>Cancelar</button>
-          <button type="button" className="btn perigo" onClick={parar}>Encerrar</button>
+          <button type="button" className="btn perigo" onClick={parar}>Recolher</button>
         </div>
       </ConfirmDialog>
     </section>
