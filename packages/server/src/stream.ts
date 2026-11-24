@@ -18,6 +18,7 @@ export type StreamEvent =
   | { kind: "text"; agent: string; text: string }
   | { kind: "tool"; agent: string; name: string; command?: string }
   | { kind: "subagent-started"; agentId: string; toolUseId?: string; subagentType?: string }
+  | { kind: "subagent-progress"; agentId: string; subagentType?: string; totalTokens?: number }
   | { kind: "subagent-finished"; agentId: string; toolUseId?: string; status?: string; totalTokens?: number }
   | { kind: "rate-limit"; status?: string; fiveHour?: RateWindow; sevenDay?: RateWindow }
   | {
@@ -64,6 +65,7 @@ const TaskDone = z.looseObject({
   status: z.string().optional(),
   usage: z.looseObject({ total_tokens: z.number().optional() }).optional(),
 });
+const TaskProgress = z.looseObject({ task_id: z.string(), subagent_type: z.string().optional(), usage: z.looseObject({ total_tokens: z.number().optional() }).optional() });
 const Window = z.looseObject({ utilization: z.number(), resetsAt: z.number(), status: z.string() });
 const RateLimit = z.looseObject({
   rate_limit_info: z.looseObject({
@@ -107,6 +109,11 @@ export function parseLine(line: string): StreamEvent[] {
     const r = TaskStarted.safeParse(json);
     if (!r.success) return bad(type);
     return [{ kind: "subagent-started", agentId: r.data.task_id, toolUseId: r.data.tool_use_id, subagentType: r.data.subagent_type }];
+  }
+  if (type === "system" && subtype === "task_progress") {
+    const r = TaskProgress.safeParse(json);
+    if (!r.success) return bad(type);
+    return [{ kind: "subagent-progress", agentId: r.data.task_id, ...(r.data.subagent_type ? { subagentType: r.data.subagent_type } : {}), ...(r.data.usage?.total_tokens !== undefined ? { totalTokens: r.data.usage.total_tokens } : {}) }];
   }
   if (type === "system" && subtype === "task_notification") {
     const r = TaskDone.safeParse(json);

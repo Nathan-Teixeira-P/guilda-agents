@@ -5,7 +5,7 @@ export type Model = (typeof MODELS)[number];
 export const AGENT_MODELS: Record<string, Model> = {
   orchestrator: "sonnet",
   intake: "haiku",
-  planner: "opus",
+  planner: "sonnet",
   "frontend-architect": "opus",
   "prd-writer": "sonnet",
   "spec-writer": "sonnet",

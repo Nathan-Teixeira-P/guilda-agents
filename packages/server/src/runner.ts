@@ -88,6 +88,7 @@ export function buildArgs(o: RunOpts, sessionId: string): string[] {
   const args = ["-p", o.prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", "dontAsk"];
   if (o.agent) args.push("--agent", o.agent);
   args.push("--max-budget-usd", budget);
+  if (!/app\.clickup\.com/.test(o.mission["demanda"] as string ?? "")) args.push("--strict-mcp-config"); // no MCP servers (their tool lists are paid on every call); only the ClickUp intake needs one
   const claudeDir = join(project, ".claude");
   const deny = [rulePath(claudeDir)]; // Edit rule also covers Write
   if (o.phase === 1) {
@@ -119,6 +120,7 @@ function buildArgsRedacao(o: RunOpts, sessionId: string, dir: string): string[] 
   if (o.agent) args.push("--agent", o.agent);
   args.push("--max-budget-usd", budget);
   const refs = o.redacao.leitura.map((p) => absPath(p, "reference"));
+  args.push("--strict-mcp-config"); // articles use WebSearch/WebFetch, never MCP
   const addDirs = refs.map((p) => (statSync(p).isDirectory() ? p : dirname(p)));
   const read = [dir, ...refs].map((p) => `Read(/${p}/**)`);
   const allow = ["Glob", "Grep", ...read, rulePath(dir)];
@@ -253,6 +255,9 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
     } else if (e.kind === "subagent-finished" && e.totalTokens !== undefined) {
       out.tokensByAgent[e.agentId] = Math.max(out.tokensByAgent[e.agentId] ?? 0, e.totalTokens);
     } else if (e.kind === "rate-limit") {
+    } else if (e.kind === "subagent-progress") { // a stopped mission never gets task_notification: progress keeps the per-agent tokens
+      if (e.subagentType) out.subagentTypes[e.agentId] ??= e.subagentType;
+      if (e.totalTokens !== undefined) out.tokensByAgent[e.agentId] = Math.max(out.tokensByAgent[e.agentId] ?? 0, e.totalTokens);
       out.rateLimit = { status: e.status, fiveHour: e.fiveHour, sevenDay: e.sevenDay, seenAt: o.now().toISOString() };
       const snap = o.plano && snapshotDeLimite(e, "");
       if (o.plano && snap) {

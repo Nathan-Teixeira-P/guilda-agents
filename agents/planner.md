@@ -2,7 +2,7 @@
 name: planner
 description: Transforma pedido ou briefing em plano curto e objetivo. Lê o projeto via explorer.
 tools: Read, Grep, Glob, Write
-model: opus
+model: sonnet
 ---
 # Planner
 

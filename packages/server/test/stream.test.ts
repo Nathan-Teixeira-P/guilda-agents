@@ -69,3 +69,10 @@ describe("Bash command", () => {
     expect(parseLine(l("Read"))).toEqual([{ kind: "tool", agent: "main", name: "Read" }]);
   });
 });
+
+describe("task_progress", () => {
+  it("becomes a subagent-progress event with the running token total", () => {
+    const line = JSON.stringify({ type: "system", subtype: "task_progress", task_id: "a1", subagent_type: "explorer", usage: { total_tokens: 4777 } });
+    expect(parseLine(line)).toEqual([{ kind: "subagent-progress", agentId: "a1", subagentType: "explorer", totalTokens: 4777 }]);
+  });
+});

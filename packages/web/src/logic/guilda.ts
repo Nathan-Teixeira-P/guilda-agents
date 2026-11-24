@@ -7,7 +7,7 @@ export interface Ficha { modelo: Modelo; funcao: string }
 export const FICHA: Record<string, Ficha> = {
   orchestrator: { modelo: "sonnet", funcao: "Classifica a demanda, roteia os agentes e media os handoffs." },
   intake: { modelo: "haiku", funcao: "Lê a tarefa e grava o briefing em formato fixo." },
-  planner: { modelo: "opus", funcao: "Transforma o pedido em um plano curto e objetivo." },
+  planner: { modelo: "sonnet", funcao: "Transforma o pedido em um plano curto e objetivo." },
   "prd-writer": { modelo: "sonnet", funcao: "Converte o plano aprovado em PRD." },
   "spec-writer": { modelo: "sonnet", funcao: "Converte PRDs em specs numerados e mantém o índice." },
   "spec-checker": { modelo: "haiku", funcao: "Confere seções, dependências e tamanho dos specs." },

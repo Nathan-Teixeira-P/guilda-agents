@@ -14,7 +14,7 @@ describe("promptFase1", () => {
     expect(p).toMatch(/never commit or push/i);
     expect(p).toMatch(/subagents? (cannot|can't|do not|don't) (create|spawn|call)/i);
     expect(p).toMatch(/one at a time/i);
-    expect(p).toMatch(/trivial/i);
+    expect(p).toMatch(/LEAN.*no planner, PRD, specs/);
   });
   it("names the sequence explorer, planner, prd-writer, spec-writer, spec-checker", () => {
     const p = promptFase1(base);
@@ -53,5 +53,11 @@ describe("promptFase2 resume comment", () => {
     expect(promptFase2(i)).not.toContain("resumed");
     expect(promptFase2(i)).not.toContain("local.ts");
     expect(promptFase2({ ...i, hubDir: "/hub" })).toContain("node /hub/scripts/local.ts compact-test-log");
+  });
+});
+
+describe("promptFase2 without specs", () => {
+  it("points at the approved plan", () => {
+    expect(promptFase2({ specs: [], projetoPath: "/p" })).toContain("/p/.claude/handoff/plan.md");
   });
 });

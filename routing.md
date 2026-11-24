@@ -4,7 +4,7 @@ Lab runs on a single Claude Pro account (no API). The real limit is plan usage (
 
 ## Models
 
-- opus: only `planner` and `frontend-architect`.
+- opus: only `frontend-architect`, plus `planner` when the orchestrator escalates a large, risky demand.
 - sonnet: code, review, PRD, spec, research, writing, `frontend-builder`, `illustrator`.
 - haiku: reading, checking, summarizing.
 
@@ -14,7 +14,7 @@ Lab runs on a single Claude Pro account (no API). The real limit is plan usage (
 |---|---|
 | `orchestrator` | sonnet |
 | `intake` | haiku |
-| `planner` | opus |
+| `planner` | sonnet |
 | `frontend-architect` | opus |
 | `prd-writer` | sonnet |
 | `spec-writer` | sonnet |
@@ -39,6 +39,10 @@ Lab runs on a single Claude Pro account (no API). The real limit is plan usage (
 ## Article flow
 
 `researcher → writer → fact-checker → illustrator → editor`
+
+## Classification
+
+LEAN demands (docs, config, one-file or small change) run `explorer` + a short plan only: no planner, PRD or specs. FULL demands run the whole chain.
 
 ## Escalation
 
