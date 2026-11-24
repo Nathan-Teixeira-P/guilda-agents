@@ -92,7 +92,7 @@ export const api = {
   setUsageAuto: (b: { auto?: boolean; intervaloMin?: number }) => call<AutoStatus>("PUT", "/usage/auto", b),
   visibilidade: (visivel: boolean, cliente: string) => call<AutoStatus>("POST", "/usage/visibilidade", { visivel, cliente }),
   consultarUso: () => call<Uso>("POST", "/usage/consult", {}),
-  newMission: (b: { project: string; demanda: string; tetoPp?: number; tetoSemanaPp?: number; confirmarUso?: boolean }) => call<{ id: string }>("POST", "/missions", b),
+  newMission: (b: { project: string; demanda: string; tetoPp?: number; tetoSemanaPp?: number; confirmarUso?: boolean; analise?: boolean }) => call<{ id: string }>("POST", "/missions", b),
   artigos: (estado?: EstadoArtigo) => call<{ artigos: Artigo[] }>("GET", `/redacao${estado ? `?estado=${estado}` : ""}`),
   artigo: (slug: string) => call<DetalheArtigo>("GET", R(slug)),
   criarArtigo: (b: PedidoRedacao & LimitesRedacao) => call<{ artigo: Artigo }>("POST", "/redacao", b),

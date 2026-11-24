@@ -67,7 +67,7 @@ const NewProject = z.object({
   apelidos: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
   clickupListUrl: z.string().max(2048).refine(validarClickupUrl, "must be an https://app.clickup.com url").optional(),
 });
-const NewMission = z.object({ project: z.string().min(1).max(100), demanda: z.string().min(1).max(20_000), tetoUsd: z.number().positive().max(1000).optional(), tetoPp: z.number().positive().max(100).optional(), tetoSemanaPp: z.number().positive().max(100).optional(), confirmarUso: z.boolean().optional() });
+const NewMission = z.object({ project: z.string().min(1).max(100), demanda: z.string().min(1).max(20_000), tetoUsd: z.number().positive().max(1000).optional(), tetoPp: z.number().positive().max(100).optional(), tetoSemanaPp: z.number().positive().max(100).optional(), confirmarUso: z.boolean().optional(), analise: z.boolean().optional() });
 const Ponto = z.object({ percentual: z.number(), reiniciaEm: z.number() });
 const UsoInicial = z.object({ cincoHoras: Ponto, semana: Ponto });
 /** Plan caps of a stored mission; absent when neither cap is set. */
@@ -731,7 +731,7 @@ export function createServer(o: ServerOpts) {
       if (!livre.ok && b.confirmarUso !== true) throw Object.assign(new HttpError(409, livre.motivo), { extra: { motivo: livre.motivo, uso: usageView() } });
       const usoInicial = uso.estado === "ok" ? { cincoHoras: { percentual: uso.cincoHoras.percentual, reiniciaEm: uso.cincoHoras.reiniciaEm }, semana: { percentual: uso.semana.percentual, reiniciaEm: uso.semana.reiniciaEm } } : undefined;
       const id = `m-${randomBytes(6).toString("hex")}`;
-      const m: Mission = { ...newMission(id, projectId!, clock), demanda: b.demanda, tetoUsd: b.tetoUsd ?? DEFAULT_TETO_USD, ...(b.tetoPp !== undefined ? { tetoPp: b.tetoPp } : {}), ...(b.tetoSemanaPp !== undefined ? { tetoSemanaPp: b.tetoSemanaPp } : {}), ...(usoInicial ? { usoInicial } : {}) };
+      const m: Mission = { ...newMission(id, projectId!, clock), ...(b.analise ? { kind: "analise" as const } : {}), demanda: b.demanda, tetoUsd: b.tetoUsd ?? DEFAULT_TETO_USD, ...(b.tetoPp !== undefined ? { tetoPp: b.tetoPp } : {}), ...(b.tetoSemanaPp !== undefined ? { tetoSemanaPp: b.tetoSemanaPp } : {}), ...(usoInicial ? { usoInicial } : {}) };
       const planning = transition(m, "planejando", { now: clock }); // persisted now: the runner only writes at the end
       save(planning);
       launch(planning, 1, prompt1(planning));

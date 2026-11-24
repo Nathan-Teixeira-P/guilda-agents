@@ -17,7 +17,7 @@ export const Mission = z.looseObject({
   id: z.string().min(1),
   project: z.string().min(1),
   stage: z.enum(STAGES),
-  kind: z.literal("redacao").optional(), // absent = code mission
+  kind: z.enum(["redacao", "analise"]).optional(), // absent = code mission; "analise" = read-only audit (UI offers to start coding from it)
   sessionId: z.string().optional(),
   pauseReason: z.string().optional(), // set only while `pausada`
   pausedFrom: z.enum(["planejando", "executando"]).optional(), // phase to resume

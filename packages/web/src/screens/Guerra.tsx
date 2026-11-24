@@ -69,6 +69,16 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
     go(`/missao/${encodeURIComponent(m.id)}`);
   }
 
+  async function codar() {
+    setBusy(true); setErro(undefined);
+    const arqs = (m.promoted ?? []).join(", ");
+    const demanda = `Comece a implementar, de acordo com a análise da missão ${m.id} (concluída).\n\nDemanda original da análise:\n${String((m as unknown as Record<string, unknown>)["demanda"] ?? "")}\n\nA análise está em: ${arqs || "(sem arquivos promovidos; leia o pacote da missão)"}.\nImplemente só o que a análise apontou como faltante ou divergente.`;
+    const r = await api.newMission({ project: m.project, demanda: demanda.slice(0, 20_000) });
+    setBusy(false);
+    if (!r.ok) { setErro(erroDeAcao(r)); return; }
+    go(`/missao/${encodeURIComponent(r.data.id)}`);
+  }
+
   const veredito = (
     <aside className="veredito" aria-label="Veredito">
       <h2>Veredito</h2>
@@ -89,6 +99,9 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
           <summary>Arquivos promovidos ({m.promoted!.length})</summary>
           <ul className="lista-simples">{m.promoted!.map((p) => <li key={p} className="mono">{p}</li>)}</ul>
         </details>
+      )}
+      {m.stage === "concluida" && (m as unknown as Record<string, unknown>)["kind"] === "analise" && (
+        <button type="button" className="btn primario" disabled={busy} onClick={codar}>Começar a codar a partir desta análise</button>
       )}
       {recusado && <div className="selo-recusado"><Seal rachado tamanho={64} /></div>}
       {erro && <p className="err" role="alert">{erro}</p>}
