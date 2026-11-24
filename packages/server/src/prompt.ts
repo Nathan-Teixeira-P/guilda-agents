@@ -35,6 +35,14 @@ export function promptFase1(i: Fase1Input): string {
   return lines.join("\n");
 }
 
+/** Appended to phase 2: the agent leaves a short, structured wrap-up that the UI shows when the contract is fulfilled. */
+export const instrucaoResumo = (path: string) =>
+  `When finished, write a JSON file at ${path} with exactly {"feito": string[], "pendente": string[], "acaoUsuario": string[]}: short pt-BR items. feito = what was delivered; pendente = what was left undone, partial or unverified; acaoUsuario = what the user must do (review, manual test, config, commit...). Use [] when none.`;
+
+/** Follow-up on a concluded mission: same session, new request from the user. */
+export const promptContinuacao = (comentario: string, projetoPath: string) =>
+  [`The mission was concluded, and the user now asks for a follow-up in the same project (${projetoPath}). Use what you already know from this session; do not redo finished work.`, "", "New request:", comentario, "", "Never commit or push. Pass file paths to agents, never contents. Subagents cannot create subagents."].join("\n");
+
 export interface Fase2Input {
   specs: string[]; // absolute spec paths
   projetoPath: string;

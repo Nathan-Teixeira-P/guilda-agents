@@ -11,7 +11,7 @@ import { newMission, transition, type Mission } from "@lab/core/src/mission.ts";
 import { normalizar, PROJECT_ID, analisarProjeto, analisarSubida, resolverProjeto, validarClickupUrl, validarComando, validarOrigem, type LeitorProjeto, type Projeto } from "@lab/core/src/projects.ts";
 import { checkPasta, cloneRepo, type CloneResult } from "./clone.ts";
 import { promoteDraft } from "./promote.ts";
-import { promptFase1, promptFase2 } from "./prompt.ts";
+import { promptFase1, promptFase2, promptContinuacao, instrucaoResumo } from "./prompt.ts";
 import { promptFase1Redacao, promptFase2Redacao, promptSugestoes } from "./prompt-redacao.ts";
 import { createProjectsStore, lerRetomada, type ProjectsStore } from "./projects-store.ts";
 import type { RunOpts, RunOutcome } from "./runner.ts";
@@ -68,6 +68,7 @@ const NewProject = z.object({
   clickupListUrl: z.string().max(2048).refine(validarClickupUrl, "must be an https://app.clickup.com url").optional(),
 });
 const NewMission = z.object({ project: z.string().min(1).max(100), demanda: z.string().min(1).max(20_000), tetoUsd: z.number().positive().max(1000).optional(), tetoPp: z.number().positive().max(100).optional(), tetoSemanaPp: z.number().positive().max(100).optional(), confirmarUso: z.boolean().optional(), analise: z.boolean().optional() });
+const Resumo = z.object({ feito: z.array(z.string().max(1000)).max(50), pendente: z.array(z.string().max(1000)).max(50), acaoUsuario: z.array(z.string().max(1000)).max(50) });
 const Ponto = z.object({ percentual: z.number(), reiniciaEm: z.number() });
 const UsoInicial = z.object({ cincoHoras: Ponto, semana: Ponto });
 /** Plan caps of a stored mission; absent when neither cap is set. */
@@ -80,6 +81,7 @@ const planoDe = (m: Record<string, unknown>) => {
 };
 const SetComandos = z.object({ comandos: Comandos });
 const Adjust = z.object({ comment: z.string().min(1).max(20_000) });
+const Continuar = z.object({ comment: z.string().min(1).max(20_000) });
 const Resume = z.object({ comment: z.string().min(1).max(20_000).optional() });
 const Empty = z.object({});
 const Cap = z.number().positive().max(100).nullable().optional(); // null removes the cap
@@ -202,8 +204,14 @@ export function createServer(o: ServerOpts) {
   /** The user stepped in (approve/adjust/resume): clear the breaker counters. */
   const intervene = (m: Mission): Mission => ({ ...m, loops: {}, handoffs: 0 });
 
+  const resumoPath = (m: Mission) => join(projectPath(m) ?? "", ".claude", "handoff", `resumo-${m.id}.json`);
+  /** Never throws: a missing or malformed wrap-up just means no summary card. */
+  const lerResumo = (p: string) => {
+    try { const r = Resumo.safeParse(JSON.parse(readFileSync(p, "utf8"))); return r.success ? r.data : undefined; } catch { return undefined; }
+  };
+
   /** Starts a phase in the background; the HTTP call returns right away. */
-  function launch(m: Mission, phase: 1 | 2, prompt: string) {
+  function launch(m: Mission, phase: 1 | 2, prompt: string, continuacao = false) {
     const proj = projectPath(m);
     const ac = new AbortController();
     const park = (id: string, why: string) => {
@@ -219,8 +227,8 @@ export function createServer(o: ServerOpts) {
     const done = (async () => {
       try {
         const out = await o.runner({
-          phase, mission: m, projectDir: proj, missionsDir: store.dir, prompt, tetoUsd: teto, now: clock, signal: ac.signal, ...(plano ? { plano } : {}),
-          ...(o.agent ? { agent: o.agent } : {}), ...(phase === 2 ? { ...(specsOf(m).length === 0 ? { semResume: true } : {}), testCommands: comandos, ...(o.hubDir ? { hubDir: o.hubDir } : {}) } : {}),
+          phase, mission: m, projectDir: proj, missionsDir: store.dir, prompt: phase === 2 ? `${prompt}\n${instrucaoResumo(resumoPath(m))}` : prompt, tetoUsd: teto, now: clock, signal: ac.signal, ...(plano ? { plano } : {}),
+          ...(o.agent ? { agent: o.agent } : {}), ...(phase === 2 ? { ...(specsOf(m).length === 0 && !continuacao ? { semResume: true } : {}), testCommands: comandos, ...(o.hubDir ? { hubDir: o.hubDir } : {}) } : {}),
           onEvent: (e: StreamEvent) => {
             if (e.kind === "rate-limit") usage.alimentar(e);
             publish("progress", { missionId: m.id, event: e });
@@ -231,6 +239,9 @@ export function createServer(o: ServerOpts) {
         if (phase === 1 && cur.stage === "aguardando-aprovacao") {
           const r = promoteDraft(join(store.dirOf(m.id), "out"), proj);
           cur = r.ok ? { ...cur, promoted: r.promoted } : { ...transition(cur, "parada", { now: clock }), stopReason: `promotion failed: ${r.reason}` };
+        } else if (phase === 2 && cur.stage === "concluida") {
+          const r = lerResumo(resumoPath(m));
+          if (r) cur = { ...cur, resumo: r };
         } else if (cur.stage === "parada") cur = { ...cur, stopReason: out.stopped ?? "stopped" };
         save(cur);
       } catch (e) {
@@ -737,7 +748,7 @@ export function createServer(o: ServerOpts) {
       launch(planning, 1, prompt1(planning));
       return send(res, 201, { id, mission: planning });
     }
-    const hit = /^\/missions\/([^/]+)(?:\/(approve|adjust|resume|stop|pause))?$/.exec(path);
+    const hit = /^\/missions\/([^/]+)(?:\/(approve|adjust|resume|continue|stop|pause))?$/.exec(path);
     if (!hit) throw new HttpError(404, "not found");
     const [, id = "", action] = hit;
 
@@ -806,6 +817,17 @@ export function createServer(o: ServerOpts) {
       const next = intervene(rest as Mission);
       save(next);
       launch(next, 1, prompt1(next, b.comment, true));
+      return send(res, 202, { mission: next });
+    }
+    if (action === "continue") {
+      const b = await json(req, Continuar);
+      const m = mustGet(id);
+      if (m.stage !== "concluida" || running.has(id) || m.kind === "redacao") throw new HttpError(409, `cannot continue in stage ${m.stage}`);
+      if (!isApproved(store.dirOf(id)) || !m.sessionId) throw new HttpError(409, "no sealed session to continue");
+      const { resumo: _old, ...limpa } = m;
+      const next = intervene(transition(limpa as Mission, "executando", { now: clock, approved: true }));
+      save(next);
+      launch(next, 2, promptContinuacao(b.comment, projectPath(m) ?? ""), true);
       return send(res, 202, { mission: next });
     }
     if (action === "pause") {

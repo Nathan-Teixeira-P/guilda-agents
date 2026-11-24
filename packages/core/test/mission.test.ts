@@ -23,6 +23,8 @@ describe("transitions", () => {
     expect(transition(at("aguardando-aprovacao"), "executando", { now, approved: true }).stage).toBe("executando"));
   it("executando -> concluida", () =>
     expect(transition(at("executando"), "concluida", { now }).stage).toBe("concluida"));
+  it("concluida -> executando (follow-up, needs approval flag)", () =>
+    expect(transition(at("concluida"), "executando", { now, approved: true }).stage).toBe("executando"));
   it("executando -> parada", () =>
     expect(transition(at("executando"), "parada", { now }).stage).toBe("parada"));
   it("intake -> parada", () => expect(transition(at("intake"), "parada", { now }).stage).toBe("parada"));
@@ -84,7 +86,6 @@ describe("invalid transitions", () => {
     ["intake", "concluida"],
     ["planejando", "executando"],
     ["executando", "planejando"],
-    ["concluida", "executando"],
   ] as const)("%s -> %s throws", (from, to) =>
     expect(() => transition(at(from), to, { now, approved: true })).toThrow(/invalid/),
   );

@@ -15,6 +15,25 @@ import { ConfirmDialog } from "../ui/ConfirmDialog.tsx";
 import { Leitor } from "../ui/Leitor.tsx";
 import { PausaPanel } from "../ui/PausaPanel.tsx";
 
+type Resumo = { feito: string[]; pendente: string[]; acaoUsuario: string[] };
+
+/** Wrap-up card shown when the contract is fulfilled: done / pending / what the user must do. */
+function ResumoCard({ r }: { r: Resumo }) {
+  const col = (t: string, itens: string[], cls: string, vazio: string, ic: string) => (
+    <section className={`panel resumo-col ${cls}`} aria-label={t}>
+      <h3 className="mini">{ic} {t} ({itens.length})</h3>
+      {itens.length ? <ul>{itens.map((i, k) => <li key={k}>{i}</li>)}</ul> : <p className="hint">{vazio}</p>}
+    </section>
+  );
+  return (
+    <div className="resumo" style={{ display: "grid", gap: "var(--e-3)", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", margin: "var(--e-3) 0" }}>
+      {col("Feito", r.feito, "ok", "Nada registrado.", "✓")}
+      {col("Pendente", r.pendente, r.pendente.length ? "warn" : "ok", "Nada pendente.", "…")}
+      {col("Sua ação", r.acaoUsuario, r.acaoUsuario.length ? "warn" : "ok", "Nada a fazer.", "→")}
+    </div>
+  );
+}
+
 const GATE_TXT = { fechado: "Fechado: ainda não há selo.", aguardando: "Aguardando o seu selo.", selado: "Selado: a execução foi autorizada." } as const;
 
 /** War room: read the package, then seal or ask for adjustments. The server is the authority on the gate; here every failure is a message. */
@@ -69,6 +88,16 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
     go(`/missao/${encodeURIComponent(m.id)}`);
   }
 
+  const [seg, setSeg] = useState("");
+  async function continuar() {
+    if (!seg.trim()) return;
+    setBusy(true); setErro(undefined);
+    const r = await api.continuar(m.id, seg.trim());
+    setBusy(false);
+    if (!r.ok) { setErro(erroDeAcao(r)); if (r.status === 409) onChange(); return; }
+    setSeg(""); onChange();
+    go(`/missao/${encodeURIComponent(m.id)}`);
+  }
   async function codar() {
     setBusy(true); setErro(undefined);
     const arqs = (m.promoted ?? []).join(", ");
@@ -124,6 +153,16 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
       {m.stage === "pausada" && <PausaPanel m={m} onDone={onChange} />}
       {m.stage === "parada" && <PausaPanel m={m} onDone={onChange} />}
       {m.stage === "concluida" && <p className="panel field ok" role="status">Missão concluída. O pacote continua disponível para leitura.</p>}
+      {m.stage === "concluida" && (m as unknown as Record<string, unknown>)["kind"] !== "redacao" && (
+        <section className="panel field" aria-labelledby="seg-t">
+          <h2 id="seg-t">Continuar esta missão</h2>
+          <p className="hint">Peça outra coisa na mesma conversa: o agente retoma a sessão e lembra do que foi feito.</p>
+          <label htmlFor="seg-c" className="sr-only">Próximo pedido</label>
+          <textarea id="seg-c" value={seg} onChange={(e) => setSeg(e.target.value)} maxLength={20000} style={{ minHeight: 90 }} />
+          <button type="button" className="btn primario" disabled={busy || !seg.trim()} onClick={continuar}>Continuar</button>
+        </section>
+      )}
+      {m.stage === "concluida" && (() => { const r = (m as unknown as { resumo?: Resumo }).resumo; return r ? <ResumoCard r={r} /> : <p className="hint">Esta missão não gerou resumo (missões anteriores a este recurso, ou o agente não o escreveu).</p>; })()}
       <div className={`guerra${carimbando ? " tranco" : ""}`}>
         <nav className="indice" aria-label="Pacote da missão">
           <h2>Pacote</h2>
