@@ -1,3 +1,4 @@
+import { TetosPlano, lerTetos } from "../ui/TetosPlano.tsx";
 import { useState, type FormEvent } from "react";
 import { api } from "../api.ts";
 import { go, type Route } from "../router.ts";
@@ -9,7 +10,6 @@ import { useNow } from "../store.ts";
 import { dicaEntrada } from "../logic/entrada.ts";
 import { ComandosEditor } from "../ui/ComandosEditor.tsx";
 
-const PRESETS = [5, 10, 15, 25];
 const NOVO = "__novo__";
 
 export function Nova({ live, route }: { live: Live; route: Route }) {
@@ -17,7 +17,8 @@ export function Nova({ live, route }: { live: Live; route: Route }) {
   const pre = route.query.get("projeto");
   const [escolha, setEscolha] = useState<string>(pre ?? ""); // only ever compared against known project ids
   const [demanda, setDemanda] = useState("");
-  const [teto, setTeto] = useState("10");
+  const [teto, setTeto] = useState("");
+  const [tetoSem, setTetoSem] = useState("");
   const [tentou, setTentou] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string>();
@@ -25,9 +26,8 @@ export function Nova({ live, route }: { live: Live; route: Route }) {
   const now = useNow();
 
   const projeto = projects.find((p) => p.id === escolha);
-  const tetoN = Number(teto);
-  const tetoOk = teto.trim() !== "" && Number.isFinite(tetoN) && tetoN >= 1 && tetoN <= 100;
-  const erros = { projeto: !projeto ? "Escolha um projeto." : "", demanda: !demanda.trim() ? "Descreva a demanda." : "", teto: !tetoOk ? "Informe de 1 a 100 pontos percentuais." : "" };
+  const { ok: tetoOk, tetos } = lerTetos(teto, tetoSem);
+  const erros = { projeto: !projeto ? "Escolha um projeto." : "", demanda: !demanda.trim() ? "Descreva a demanda." : "", teto: !tetoOk ? "Teto inválido." : "" };
 
   async function enviar(e?: FormEvent, confirmarUso = false) {
     e?.preventDefault();
@@ -35,7 +35,7 @@ export function Nova({ live, route }: { live: Live; route: Route }) {
     if (erros.projeto || erros.demanda || erros.teto || !projeto) return;
     setBusy(true);
     setErr(undefined);
-    const r = await api.newMission({ project: projeto.id, demanda: demanda.trim(), tetoPp: tetoN, ...(confirmarUso ? { confirmarUso: true } : {}) });
+    const r = await api.newMission({ project: projeto.id, demanda: demanda.trim(), ...tetos, ...(confirmarUso ? { confirmarUso: true } : {}) });
     setBusy(false);
     if (!r.ok && r.status === 409) return setMotivoUso(r.error);
     if (!r.ok) return setErr(r.status === 0 ? "O servidor está fora do ar. Nada foi enviado." : `O servidor recusou a missão: ${r.error}`);
@@ -82,17 +82,9 @@ export function Nova({ live, route }: { live: Live; route: Route }) {
         {tentou && erros.demanda && <p id="nm-dem-e" className="err">{erros.demanda}</p>}
       </div>
 
-      <div className="field">
-        <label htmlFor="nm-teto">Quanto do plano posso gastar (pontos percentuais da janela de 5 h)</label>
-        <div className="presets" role="group" aria-label="Valores sugeridos">
-          {PRESETS.map((n) => <button key={n} type="button" className="btn chico" aria-pressed={tetoN === n} onClick={() => setTeto(String(n))}>{n} pp</button>)}
-        </div>
-        <input id="nm-teto" type="number" inputMode="decimal" min={1} max={100} step={1} value={teto} onChange={(e) => setTeto(e.target.value)} aria-invalid={tentou && !!erros.teto} style={{ maxWidth: 160 }} aria-describedby="nm-teto-h" />
-        <p id="nm-teto-h" className="hint">Padrão conservador: 10 pp. O teto é enviado junto com a missão.</p>
-        {tentou && erros.teto && <p className="err">{erros.teto}</p>}
-      </div>
+      <TetosPlano cinco={teto} semana={tetoSem} onCinco={setTeto} onSemana={setTetoSem} tentou={tentou} />
 
-      <div className="field"><Emblem uso={live.usage} now={now} onConsultar={live.consultarUso} tamanho={96} modo="completo" {...(tetoOk ? { tetoPp: tetoN } : {})} /></div>
+      <div className="field"><Emblem uso={live.usage} now={now} onConsultar={live.consultarUso} tamanho={96} modo="completo" {...(tetos.tetoPp ? { tetoPp: tetos.tetoPp } : {})} /></div>
 
       {err && <p className="err field" role="alert">{err}</p>}
       <div className="row">

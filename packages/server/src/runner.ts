@@ -29,7 +29,7 @@ export interface RunOpts {
   agent?: string;
   testCommands?: string[]; // phase 2: project test commands allowed in Bash, e.g. "npm test"
   hubDir?: string; // phase 2: also allows exactly the hub local-model helper (spec 036)
-  plano?: { inicio?: Ponto; tetoPp: number }; // plan-usage cap (spec 018): 5h window at mission start; absent on old missions
+  plano?: { inicio?: Ponto; tetoPp?: number; inicioSemana?: Ponto; tetoSemanaPp?: number }; // both caps optional (percent of the 5h / weekly window) // plan-usage cap (spec 018): 5h window at mission start; absent on old missions
   redacao?: { hubDir: string; leitura: string[]; sugerir?: boolean }; // article missions: projectDir is the article folder; leitura = user-given read-only paths
   breaker?: { get: () => BreakerState; step: string; limits?: BreakerLimits };
   claudeBin?: string;
@@ -222,6 +222,7 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
   if (o.signal?.aborted) stop("stopped by user");
   o.signal?.addEventListener("abort", () => stop("stopped by user"), { once: true });
   let baseline: Ponto | undefined = o.plano?.inicio; // plan-usage baseline (spec 018)
+  let baselineSemana: Ponto | undefined = o.plano?.inicioSemana;
   const tokensByMsg = new Map<string, { agent: string; total: number }>(); // assistant blocks repeat the same message id
   let anon = 0;
   const tripBreaker = () => {
@@ -253,10 +254,17 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
       out.tokensByAgent[e.agentId] = Math.max(out.tokensByAgent[e.agentId] ?? 0, e.totalTokens);
     } else if (e.kind === "rate-limit") {
       out.rateLimit = { status: e.status, fiveHour: e.fiveHour, sevenDay: e.sevenDay, seenAt: o.now().toISOString() };
-      const atual = o.plano && snapshotDeLimite(e, "")?.cincoHoras;
-      if (o.plano && atual) {
-        baseline ??= atual; // no reading at start (user confirmed anyway): the first reading in the run is the baseline
-        if (deveParar(baseline, atual, o.plano.tetoPp)) stop(`plan: consumiu ${consumo(baseline, atual)} pp de ${o.plano.tetoPp} pp`);
+      const snap = o.plano && snapshotDeLimite(e, "");
+      if (o.plano && snap) {
+        const { tetoPp, tetoSemanaPp } = o.plano;
+        if (tetoPp !== undefined) {
+          baseline ??= snap.cincoHoras; // no reading at start (user confirmed anyway): the first reading in the run is the baseline
+          if (deveParar(baseline, snap.cincoHoras, tetoPp)) stop(`plan: consumiu ${consumo(baseline, snap.cincoHoras)} pp de ${tetoPp} pp (5 h)`);
+        }
+        if (tetoSemanaPp !== undefined) {
+          baselineSemana ??= snap.semana;
+          if (deveParar(baselineSemana, snap.semana, tetoSemanaPp)) stop(`plan: consumiu ${consumo(baselineSemana, snap.semana)} pp de ${tetoSemanaPp} pp (semana)`);
+        }
       }
     } else if (e.kind === "result") {
       out.denials = e.permissionDenials;

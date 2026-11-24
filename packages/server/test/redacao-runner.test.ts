@@ -185,7 +185,7 @@ describe("usage", () => {
   it("?estimar=1 returns the estimate and starts nothing", async () => {
     const r = await call("POST", "/redacao?estimar=1", { modo: "definido", tema: "X" });
     expect(r.status).toBe(200);
-    expect(r.json.estimativa).toMatchObject({ livre: { ok: true }, tetoPp: 10, uso: { estado: "ok", cincoHoras: { percentual: 3 } } });
+    expect(r.json.estimativa).toMatchObject({ livre: { ok: true }, tetoPp: null, tetoSemanaPp: null, uso: { estado: "ok", cincoHoras: { percentual: 3 } } });
     expect(calls).toHaveLength(0);
     expect(rs.listar()).toEqual([]);
   });
@@ -199,7 +199,7 @@ describe("usage", () => {
   it("pauses with a Portuguese reason when the plan cap is reached", async () => {
     const a = await criar({ tetoPp: 10 }); // the replayed stream goes from 3% to 14%
     const m = await esperar(a.id, "pausado");
-    expect(m.pauseReason).toBe("teto de uso do plano: consumiu 11 pp de 10 pp");
+    expect(m.pauseReason).toBe("teto de uso do plano: consumiu 11 pp de 10 pp (5 h)");
   });
 });
 

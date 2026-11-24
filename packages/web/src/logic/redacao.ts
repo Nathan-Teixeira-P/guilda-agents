@@ -39,7 +39,7 @@ export interface EventoArtigo { slug: string; estado: EstadoArtigo | "excluido" 
 export interface Estimativa {
   uso: unknown;
   livre: { ok: boolean; motivo?: string };
-  tetoPp: number; tetoUsd: number; palavras: number;
+  tetoPp: number | null; tetoSemanaPp: number | null; tetoUsd: number; palavras: number;
 }
 
 export function estadoDoArtigo(a: Pick<Artigo, "stage" | "estado">): EstadoArtigo {

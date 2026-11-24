@@ -27,7 +27,7 @@ import { sugerirAgenda } from "@lab/core/src/agenda.ts";
 import { createReaper, localStatus, cleanStale, type LifecycleDeps } from "./ollama-lifecycle.ts";
 import { LocalConfig, ollamaModels, readLocalConfig, readStats, writeLocalConfig } from "./local-config.ts";
 import { watchDirs } from "./watch.ts";
-import { podeIniciar, TETO_PADRAO_PP } from "@lab/core/src/plan-budget.ts";
+import { podeIniciar } from "@lab/core/src/plan-budget.ts";
 import { vista } from "@lab/core/src/usage.ts";
 import { createNotificador, LidasPut, NotifConfigPut, type SpawnDesktop } from "./notificador.ts";
 
@@ -67,9 +67,17 @@ const NewProject = z.object({
   apelidos: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
   clickupListUrl: z.string().max(2048).refine(validarClickupUrl, "must be an https://app.clickup.com url").optional(),
 });
-const NewMission = z.object({ project: z.string().min(1).max(100), demanda: z.string().min(1).max(20_000), tetoUsd: z.number().positive().max(1000).optional(), tetoPp: z.number().positive().max(100).optional(), confirmarUso: z.boolean().optional() });
+const NewMission = z.object({ project: z.string().min(1).max(100), demanda: z.string().min(1).max(20_000), tetoUsd: z.number().positive().max(1000).optional(), tetoPp: z.number().positive().max(100).optional(), tetoSemanaPp: z.number().positive().max(100).optional(), confirmarUso: z.boolean().optional() });
 const Ponto = z.object({ percentual: z.number(), reiniciaEm: z.number() });
 const UsoInicial = z.object({ cincoHoras: Ponto, semana: Ponto });
+/** Plan caps of a stored mission; absent when neither cap is set. */
+const planoDe = (m: Record<string, unknown>) => {
+  const ini = UsoInicial.safeParse(m["usoInicial"]);
+  const tetoPp = typeof m["tetoPp"] === "number" ? m["tetoPp"] : undefined;
+  const tetoSemanaPp = typeof m["tetoSemanaPp"] === "number" ? m["tetoSemanaPp"] : undefined;
+  if (tetoPp === undefined && tetoSemanaPp === undefined) return undefined;
+  return { ...(tetoPp !== undefined ? { tetoPp } : {}), ...(tetoSemanaPp !== undefined ? { tetoSemanaPp } : {}), ...(ini.success ? { inicio: ini.data.cincoHoras, inicioSemana: ini.data.semana } : {}) };
+};
 const SetComandos = z.object({ comandos: Comandos });
 const Adjust = z.object({ comment: z.string().min(1).max(20_000) });
 const Resume = z.object({ comment: z.string().min(1).max(20_000).optional() });
@@ -80,7 +88,7 @@ const SugerirAgenda = z.object({ nichos: z.array(z.object({ key: z.string().min(
 const PutNichos = z.object({ nichos: z.array(z.unknown()).max(200), hash: z.string().min(1).max(100), mtimeMs: z.number() });
 const SYNC_AVISO = "Register the project 'afiliados' (id or name) in the hub to use this panel.";
 const Ajustes = z.object({ comentario: z.string().trim().min(1).max(20_000) });
-const Limites = z.object({ tetoUsd: z.number().positive().max(1000).optional(), tetoPp: z.number().positive().max(100).optional(), confirmarUso: z.boolean().optional() });
+const Limites = z.object({ tetoUsd: z.number().positive().max(1000).optional(), tetoPp: z.number().positive().max(100).optional(), tetoSemanaPp: z.number().positive().max(100).optional(), confirmarUso: z.boolean().optional() });
 const Escolher = z.object({ indice: z.number().int().min(0) });
 const ESTADOS = ["pesquisando", "rascunho", "em-revisao", "edicao-final", "aprovado", "cancelado", "pausado"];
 const TIPOS: Record<string, string> = { ".md": "text/markdown; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png" };
@@ -203,9 +211,7 @@ export function createServer(o: ServerOpts) {
     if (!proj) { park(m.id, "unknown project"); return; }
     const teto = typeof m["tetoUsd"] === "number" ? m["tetoUsd"] : DEFAULT_TETO_USD;
     const comandos = registry.get(m.project)?.comandos ?? [];
-    const ini = UsoInicial.safeParse(m["usoInicial"]);
-    const tetoPp = typeof m["tetoPp"] === "number" ? m["tetoPp"] : undefined;
-    const plano = tetoPp !== undefined ? { ...(ini.success ? { inicio: ini.data.cincoHoras } : {}), tetoPp } : undefined; // old missions (no tetoPp): no cap; no baseline: first reading becomes the baseline
+    const plano = planoDe(m); // no caps: no limit; no baseline: first reading becomes the baseline
     if (phase === 2 && comandos.length === 0) publish("warning", { missionId: m.id, message: "sem comandos de teste configurados: a fase 2 roda sem Bash" });
     const stopWatch = watchDirs({ mission: store.dirOf(m.id), project: join(proj, ".claude") }, (e) => publish("file", { missionId: m.id, ...e }));
     const done = (async () => {
@@ -323,8 +329,7 @@ export function createServer(o: ServerOpts) {
     const ped = PedidoRedacao.safeParse(m["pedido"]);
     if (!ped.success) { park("pedido inválido"); return; }
     const leitura = ped.data.referencias.filter((r) => r.tipo === "caminho").map((r) => r.valor);
-    const ini = UsoInicial.safeParse(m["usoInicial"]);
-    const tetoPp = typeof m["tetoPp"] === "number" ? m["tetoPp"] : undefined;
+    const plano = planoDe(m);
     const input = { pedido: ped.data, dir, hub, leitura, ...(comentario ? { comentario } : {}) };
     const sugerir = ped.data.modo === "sugerir"; // researcher only; the result is sugestoes.json, validated below
     const done = (async () => {
@@ -332,7 +337,7 @@ export function createServer(o: ServerOpts) {
         const out = await o.runner({
           phase, mission: m, projectDir: dir, missionsDir: rs.dir, tetoUsd: typeof m["tetoUsd"] === "number" ? m["tetoUsd"] : DEFAULT_TETO_USD, now: clock, signal: ac.signal,
           prompt: sugerir ? promptSugestoes(input) : phase === 1 ? promptFase1Redacao(input) : promptFase2Redacao(input), redacao: { hubDir: hub, leitura, ...(sugerir ? { sugerir } : {}) },
-          ...(tetoPp !== undefined ? { plano: { ...(ini.success ? { inicio: ini.data.cincoHoras } : {}), tetoPp } } : {}), ...(o.agent ? { agent: o.agent } : {}),
+          ...(plano ? { plano } : {}), ...(o.agent ? { agent: o.agent } : {}),
           onEvent: (e: StreamEvent) => { if (e.kind === "rate-limit") usage.alimentar(e); publish("progress", { missionId: m.id, event: e }); nt?.progresso(m.id, e, "redacao"); },
         });
         let cur: Mission = out.mission;
@@ -393,12 +398,12 @@ export function createServer(o: ServerOpts) {
       if (!lim.success) throw new HttpError(400, `invalid input: ${lim.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
       const uso = usage.atual();
       const livre = podeIniciar(uso);
-      const tetoPp = lim.data.tetoPp ?? TETO_PADRAO_PP;
-      if (url.searchParams.get("estimar") === "1") return send(res, 200, { estimativa: { uso: usageView(), livre, tetoPp, tetoUsd: lim.data.tetoUsd ?? DEFAULT_TETO_USD, palavras: b.palavras } }); // nothing is created or started
+      const { tetoPp, tetoSemanaPp } = lim.data;
+      if (url.searchParams.get("estimar") === "1") return send(res, 200, { estimativa: { uso: usageView(), livre, tetoPp: tetoPp ?? null, tetoSemanaPp: tetoSemanaPp ?? null, tetoUsd: lim.data.tetoUsd ?? DEFAULT_TETO_USD, palavras: b.palavras } }); // nothing is created or started
       if (!livre.ok && lim.data.confirmarUso !== true) throw Object.assign(new HttpError(409, livre.motivo), { extra: { motivo: livre.motivo, uso: usageView() } });
       const usoInicial = uso.estado === "ok" ? { cincoHoras: { percentual: uso.cincoHoras.percentual, reiniciaEm: uso.cincoHoras.reiniciaEm }, semana: { percentual: uso.semana.percentual, reiniciaEm: uso.semana.reiniciaEm } } : undefined;
       const criada = rs.criar(b, clock);
-      const m = transition({ ...criada, tetoUsd: lim.data.tetoUsd ?? DEFAULT_TETO_USD, tetoPp, ...(usoInicial ? { usoInicial } : {}) }, "planejando", { now: clock });
+      const m = transition({ ...criada, tetoUsd: lim.data.tetoUsd ?? DEFAULT_TETO_USD, ...(tetoPp !== undefined ? { tetoPp } : {}), ...(tetoSemanaPp !== undefined ? { tetoSemanaPp } : {}), ...(usoInicial ? { usoInicial } : {}) }, "planejando", { now: clock });
       rs.salvar(m);
       artigoEvent(m);
       launchRedacao(m, 1);
@@ -723,7 +728,7 @@ export function createServer(o: ServerOpts) {
       if (!livre.ok && b.confirmarUso !== true) throw Object.assign(new HttpError(409, livre.motivo), { extra: { motivo: livre.motivo, uso: usageView() } });
       const usoInicial = uso.estado === "ok" ? { cincoHoras: { percentual: uso.cincoHoras.percentual, reiniciaEm: uso.cincoHoras.reiniciaEm }, semana: { percentual: uso.semana.percentual, reiniciaEm: uso.semana.reiniciaEm } } : undefined;
       const id = `m-${randomBytes(6).toString("hex")}`;
-      const m: Mission = { ...newMission(id, projectId!, clock), demanda: b.demanda, tetoUsd: b.tetoUsd ?? DEFAULT_TETO_USD, tetoPp: b.tetoPp ?? TETO_PADRAO_PP, ...(usoInicial ? { usoInicial } : {}) };
+      const m: Mission = { ...newMission(id, projectId!, clock), demanda: b.demanda, tetoUsd: b.tetoUsd ?? DEFAULT_TETO_USD, ...(b.tetoPp !== undefined ? { tetoPp: b.tetoPp } : {}), ...(b.tetoSemanaPp !== undefined ? { tetoSemanaPp: b.tetoSemanaPp } : {}), ...(usoInicial ? { usoInicial } : {}) };
       const planning = transition(m, "planejando", { now: clock }); // persisted now: the runner only writes at the end
       save(planning);
       launch(planning, 1, prompt1(planning));

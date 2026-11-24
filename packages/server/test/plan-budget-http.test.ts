@@ -79,11 +79,13 @@ describe("POST /missions plan usage gate", () => {
     expect(r.status).toBe(201);
     expect(r.json.mission.usoInicial.cincoHoras.percentual).toBe(85);
   });
-  it("records usoInicial and the default 10 pp cap", async () => {
+  it("records usoInicial and no cap by default", async () => {
     feed(0.03);
     const r = await make();
     expect(r.status).toBe(201);
-    expect(r.json.mission).toMatchObject({ tetoPp: 10, usoInicial: { cincoHoras: { percentual: 3, reiniciaEm: RESET5 }, semana: { percentual: 10, reiniciaEm: RESET7 } } });
+    expect(r.json.mission).toMatchObject({ usoInicial: { cincoHoras: { percentual: 3, reiniciaEm: RESET5 }, semana: { percentual: 10, reiniciaEm: RESET7 } } });
+    expect(r.json.mission.tetoPp).toBeUndefined();
+    expect(r.json.mission.tetoSemanaPp).toBeUndefined();
   });
   it("rejects an invalid cap", async () => {
     feed(0.03);
@@ -95,10 +97,21 @@ describe("POST /missions plan usage gate", () => {
 describe("pause at the plan cap", () => {
   it("pauses with a Portuguese reason when a rate_limit_event reaches the cap", async () => {
     feed(0.03); // the replayed stream reports 14%: 11 pp consumed against a 10 pp cap
-    const id = (await make()).json.id;
+    const id = (await make({ tetoPp: 10 })).json.id;
     const m = await settle(id);
     expect(m.stage).toBe("pausada");
-    expect(m.pauseReason).toBe("teto de uso do plano: consumiu 11 pp de 10 pp");
+    expect(m.pauseReason).toBe("teto de uso do plano: consumiu 11 pp de 10 pp (5 h)");
+  });
+  it("pauses at the weekly cap too", async () => {
+    feed(0.03, 0.05); // the stream reports 10% for the week: 5 pp consumed against a 1 pp cap
+    const id = (await make({ tetoSemanaPp: 1 })).json.id;
+    const m = await settle(id);
+    expect(m.stage).toBe("pausada");
+    expect(m.pauseReason).toMatch(/^teto de uso do plano: consumiu .* \(semana\)$/);
+  });
+  it("runs uncapped when no cap is given", async () => {
+    feed(0.03);
+    expect((await settle((await make()).json.id)).stage).toBe("aguardando-aprovacao");
   });
   it("keeps going below the cap", async () => {
     feed(0.03);
@@ -111,11 +124,11 @@ describe("pause at the plan cap", () => {
     const two = join(root, "two-readings.jsonl");
     writeFileSync(two, [at(0.1), at(0.15), at(0.25)].join("\n") + "\n"); // baseline 10%, then 15% (under the cap), then 25% (15 pp over a 10 pp cap)
     srvSpawnFile = two;
-    const id = (await make({ confirmarUso: true })).json.id; // no reading recorded: no usoInicial
+    const id = (await make({ tetoPp: 10, confirmarUso: true })).json.id; // no reading recorded: no usoInicial
     const m = await settle(id);
     expect(m.usoInicial).toBeUndefined();
     expect(m.stage).toBe("pausada");
-    expect(m.pauseReason).toBe("teto de uso do plano: consumiu 15 pp de 10 pp");
+    expect(m.pauseReason).toBe("teto de uso do plano: consumiu 15 pp de 10 pp (5 h)");
   });
   it("old missions without usoInicial run uncapped", async () => {
     const id = (await make({ confirmarUso: true })).json.id; // no reading: no baseline recorded

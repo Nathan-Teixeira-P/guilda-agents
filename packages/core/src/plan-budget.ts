@@ -3,7 +3,6 @@ import type { Estado, Janela } from "./usage.ts";
 /** Plan-usage budget (spec 018). Pure. Percentages are the plan's own, in percentage points (pp). */
 export const LIMIAR_5H = 80;
 export const LIMIAR_SEMANA = 90;
-export const TETO_PADRAO_PP = 10;
 
 export type Limiares = { cincoHoras: number; semana: number };
 export type Ponto = Pick<Janela, "percentual" | "reiniciaEm">;

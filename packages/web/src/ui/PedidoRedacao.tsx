@@ -1,3 +1,4 @@
+import { TetosPlano, lerTetos } from "./TetosPlano.tsx";
 import { useId, useState } from "react";
 import { api } from "../api.ts";
 import { FORM_VAZIO, montarPedido, type Estimativa, type FormRedacao, type PedidoRedacao as Pedido, type Referencia } from "../logic/redacao.ts";
@@ -6,7 +7,6 @@ import { Emblem } from "./Emblem.tsx";
 import { Membro } from "./Avatar.tsx";
 import { useNow, type Live } from "../store.ts";
 
-const PRESETS = [5, 10, 15, 25];
 const TIPOS: { v: Referencia["tipo"]; r: string; dica: string }[] = [
   { v: "url", r: "Link", dica: "https://…" },
   { v: "caminho", r: "Caminho", dica: "/home/você/arquivo.md" },
@@ -19,7 +19,8 @@ export function PedidoRedacao({ live, inicial, onCriado }: { live: Live; inicial
   const [tentou, setTentou] = useState(false);
   const [est, setEst] = useState<Estimativa>();
   const [pedido, setPedido] = useState<Pedido>();
-  const [teto, setTeto] = useState("10");
+  const [teto, setTeto] = useState("");
+  const [tetoSem, setTetoSem] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string>();
   const [motivoUso, setMotivoUso] = useState<string>();
@@ -27,8 +28,7 @@ export function PedidoRedacao({ live, inicial, onCriado }: { live: Live; inicial
   const id = useId();
   const v = montarPedido(f);
   const erros = v.ok ? {} : v.erros;
-  const tetoN = Number(teto);
-  const tetoOk = teto.trim() !== "" && Number.isFinite(tetoN) && tetoN >= 1 && tetoN <= 100;
+  const { ok: tetoOk, tetos } = lerTetos(teto, tetoSem);
   const mudar = (p: Partial<FormRedacao>) => { setF((c) => ({ ...c, ...p })); setEst(undefined); setErr(undefined); };
   const setRef = (i: number, p: Partial<Referencia>) => mudar({ referencias: f.referencias.map((r, j) => (j === i ? { ...r, ...p } : r)) });
   const definido = f.modo === "definido";
@@ -38,7 +38,7 @@ export function PedidoRedacao({ live, inicial, onCriado }: { live: Live; inicial
     setTentou(true);
     if (!v.ok) return;
     setBusy(true); setErr(undefined);
-    const r = await api.estimarArtigo({ ...v.pedido, tetoPp: tetoOk ? tetoN : 10 });
+    const r = await api.estimarArtigo({ ...v.pedido, ...tetos });
     setBusy(false);
     if (!r.ok) return setErr(r.status === 0 ? "O servidor está fora do ar. Nada foi enviado." : `Não foi possível estimar: ${r.error}`);
     setPedido(v.pedido); setEst(r.data.estimativa);
@@ -46,7 +46,7 @@ export function PedidoRedacao({ live, inicial, onCriado }: { live: Live; inicial
   async function iniciar(confirmarUso = false) {
     if (!pedido || !tetoOk) return;
     setBusy(true); setErr(undefined);
-    const r = await api.criarArtigo({ ...pedido, tetoPp: tetoN, ...(confirmarUso ? { confirmarUso: true } : {}) });
+    const r = await api.criarArtigo({ ...pedido, ...tetos, ...(confirmarUso ? { confirmarUso: true } : {}) });
     setBusy(false);
     if (!r.ok && r.status === 409) return setMotivoUso(r.error);
     if (!r.ok) return setErr(r.status === 0 ? "O servidor está fora do ar. Nada foi iniciado." : `O servidor recusou o pedido: ${r.error}`);
@@ -111,13 +111,8 @@ export function PedidoRedacao({ live, inicial, onCriado }: { live: Live; inicial
           <p>{definido ? "Artigo" : "Pesquisa de temas"} de cerca de {est.palavras} palavras. Teto de custo: US$ {est.tetoUsd}.</p>
           {!est.livre.ok && <p className="warn" role="note"><strong>Atenção:</strong> {est.livre.motivo ?? "o uso do plano está alto agora."}</p>}
           {est.livre.ok && <p className="hint ok">Há folga no plano agora.</p>}
-          <div className="field" style={{ marginTop: "var(--e-3)" }}>
-            <label htmlFor={`${id}-teto`}>Quanto do plano posso gastar (pontos percentuais da janela de 5 h)</label>
-            <div className="presets" role="group" aria-label="Valores sugeridos">{PRESETS.map((n) => <button key={n} type="button" className="btn chico" aria-pressed={tetoN === n} onClick={() => setTeto(String(n))}>{n} pp</button>)}</div>
-            <input id={`${id}-teto`} type="number" inputMode="decimal" min={1} max={100} step={1} value={teto} onChange={(e) => setTeto(e.target.value)} aria-invalid={!tetoOk} style={{ maxWidth: 160 }} />
-            {!tetoOk && <p className="err">Informe de 1 a 100 pontos percentuais.</p>}
-          </div>
-          <Emblem uso={live.usage} now={now} onConsultar={live.consultarUso} tamanho={96} modo="completo" {...(tetoOk ? { tetoPp: tetoN } : {})} />
+          <TetosPlano cinco={teto} semana={tetoSem} onCinco={setTeto} onSemana={setTetoSem} />
+          <Emblem uso={live.usage} now={now} onConsultar={live.consultarUso} tamanho={96} modo="completo" {...(tetos.tetoPp ? { tetoPp: tetos.tetoPp } : {})} />
           <div className="row" style={{ marginTop: "var(--e-4)" }}>
             <button type="button" className="btn primario" disabled={busy || !tetoOk} onClick={() => void iniciar()}>{busy ? "Iniciando…" : definido ? "Iniciar o artigo" : "Iniciar a pesquisa"}</button>
             <button type="button" className="btn" onClick={() => setEst(undefined)}>Voltar a editar</button>

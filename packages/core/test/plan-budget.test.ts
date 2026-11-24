@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consumo, deveParar, LIMIAR_5H, LIMIAR_SEMANA, podeIniciar, TETO_PADRAO_PP } from "../src/plan-budget.ts";
+import { consumo, deveParar, LIMIAR_5H, LIMIAR_SEMANA, podeIniciar } from "../src/plan-budget.ts";
 import type { Estado } from "../src/usage.ts";
 
 const ok = (c: number, s: number): Estado => ({
@@ -10,7 +10,7 @@ const ok = (c: number, s: number): Estado => ({
 });
 
 describe("constants", () => {
-  it("are the documented defaults", () => expect([LIMIAR_5H, LIMIAR_SEMANA, TETO_PADRAO_PP]).toEqual([80, 90, 10]));
+  it("are the documented defaults", () => expect([LIMIAR_5H, LIMIAR_SEMANA]).toEqual([80, 90]));
 });
 
 describe("podeIniciar", () => {
