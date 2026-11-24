@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseMission, transition, writeMission, type Mission } from "@lab/core/src/mission.ts";
 
@@ -27,6 +27,11 @@ export function createStore(dir: string) {
     save(m: Mission) {
       mkdirSync(dirOf(m.id), { recursive: true });
       writeMission(dirOf(m.id), m);
+    },
+    remove(id: string): boolean {
+      if (!existsSync(join(dirOf(id), "mission.json"))) return false;
+      rmSync(dirOf(id), { recursive: true });
+      return true;
     },
     list(): Mission[] {
       return readdirSync(base)

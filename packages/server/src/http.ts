@@ -82,6 +82,8 @@ const SetComandos = z.object({ comandos: Comandos });
 const Adjust = z.object({ comment: z.string().min(1).max(20_000) });
 const Resume = z.object({ comment: z.string().min(1).max(20_000).optional() });
 const Empty = z.object({});
+const Cap = z.number().positive().max(100).nullable().optional(); // null removes the cap
+const EditMission = z.object({ demanda: z.string().min(1).max(20_000).optional(), tetoPp: Cap, tetoSemanaPp: Cap });
 const PutLocal = z.object({ enabled: z.boolean().optional(), model: z.string().min(1).max(100).optional() }).strict();
 const HHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const SugerirAgenda = z.object({ nichos: z.array(z.object({ key: z.string().min(1).max(100), horas: z.array(HHMM).max(100).optional(), envios: z.number().int().min(0).max(100) })).max(50), intervaloMin: z.number().int().min(1).max(600).optional() });
@@ -743,6 +745,23 @@ export function createServer(o: ServerOpts) {
       return send(res, 200, { mission: m, package: pack(m), breaker: { loops: m.loops, handoffs: m.handoffs, limits: { maxLoops: MAX_LOOPS_PER_SPEC, maxHandoffs: MAX_CHAINED_HANDOFFS } } });
     }
     if (method !== "POST" || !action) throw new HttpError(404, "not found");
+    if (!action && (method === "PATCH" || method === "DELETE")) {
+      const m = mustGet(id);
+      if (running.has(id) || m.stage === "planejando" || m.stage === "executando") throw new HttpError(409, `cannot ${method === "PATCH" ? "edit" : "delete"} in stage ${m.stage}: stop it first`);
+      if (method === "DELETE") {
+        store.remove(id);
+        return send(res, 200, { removed: id });
+      }
+      const b = await json(req, EditMission);
+      const { tetoPp: _a, tetoSemanaPp: _b, ...rest } = m;
+      const next: Mission = { ...rest, ...(b.demanda !== undefined ? { demanda: b.demanda } : {}), updatedAt: clock().toISOString() };
+      for (const k of ["tetoPp", "tetoSemanaPp"] as const) {
+        const v = b[k] === undefined ? m[k] : b[k]; // undefined keeps, null removes
+        if (typeof v === "number") next[k] = v;
+      }
+      save(next);
+      return send(res, 200, { mission: next });
+    }
 
     if (action === "approve") {
       await json(req, Empty);

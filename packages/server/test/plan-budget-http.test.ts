@@ -137,3 +137,18 @@ describe("pause at the plan cap", () => {
     expect(m.stage).toBe("aguardando-aprovacao");
   });
 });
+
+describe("edit and delete", () => {
+  it("edits demanda and caps (null removes), then deletes; refuses while running", async () => {
+    feed(0.03);
+    const id = (await make({ tetoPp: 20 })).json.id;
+    expect((await call("PATCH", `/missions/${id}`, { demanda: "x" })).status).toBe(409); // still planning
+    await settle(id);
+    const r = await call("PATCH", `/missions/${id}`, { demanda: "nova", tetoSemanaPp: 30, tetoPp: null });
+    expect(r.status).toBe(200);
+    expect(r.json.mission).toMatchObject({ demanda: "nova", tetoSemanaPp: 30 });
+    expect(r.json.mission.tetoPp).toBeUndefined();
+    expect((await call("DELETE", `/missions/${id}`)).status).toBe(200);
+    expect((await call("GET", `/missions/${id}`)).status).toBe(404);
+  });
+});

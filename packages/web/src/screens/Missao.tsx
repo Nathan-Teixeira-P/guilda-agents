@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Detalhe } from "../api.ts";
+import { go } from "../router.ts";
+import { TetosPlano, lerTetos } from "../ui/TetosPlano.tsx";
 import { type M } from "../logic/stages.ts";
 import { formatDesde } from "../logic/time.ts";
 import { useNow, type Live } from "../store.ts";
@@ -53,6 +55,8 @@ export function Missao({ id, forcada, live }: { id: string; forcada?: Vista; liv
   const nome = live.projects.find((p) => p.id === m.project)?.nome ?? m.project;
   const outra: Vista = vista === "vivo" ? "guerra" : "vivo";
   const recarregar = () => { void det.reload(); live.reload(); };
+  const ocupada = m.stage === "planejando" || m.stage === "executando";
+  const mm = m as M & { tetoPp?: number; tetoSemanaPp?: number };
 
   return (
     <>
@@ -64,8 +68,48 @@ export function Missao({ id, forcada, live }: { id: string; forcada?: Vista; liv
         </div>
         <a className="btn chico" href={`#/missao/${encodeURIComponent(id)}/${outra}`}>{outra === "guerra" ? "Ler o pacote (sala de guerra)" : "Ver ao vivo"}</a>
       </div>
+      {!ocupada && <Gerir id={id} demanda={m.demanda ?? ""} tetoPp={mm.tetoPp} tetoSemanaPp={mm.tetoSemanaPp} onSaved={recarregar} onDeleted={() => { live.reload(); go("/quadro"); }} />}
       {det.error && !det.loading && <p className="err field" role="alert">{det.status === 0 ? "O servidor está fora do ar: os dados abaixo podem estar desatualizados." : `Não foi possível atualizar a missão: ${det.error}`}</p>}
       {vista === "vivo" ? <Vivo m={m} live={live} onChange={recarregar} /> : <Guerra m={m} files={det.data?.package.files} carregando={det.loading} live={live} onChange={recarregar} />}
     </>
+  );
+}
+
+/** Edit (demand and plan caps) and delete; only offered while no agent is running. */
+function Gerir({ id, demanda, tetoPp, tetoSemanaPp, onSaved, onDeleted }: { id: string; demanda: string; tetoPp: number | undefined; tetoSemanaPp: number | undefined; onSaved: () => void; onDeleted: () => void }) {
+  const [aberto, setAberto] = useState(false);
+  const [d, setD] = useState(demanda);
+  const [c5, setC5] = useState(tetoPp?.toString() ?? "");
+  const [cs, setCs] = useState(tetoSemanaPp?.toString() ?? "");
+  const [err, setErr] = useState<string>();
+  const { ok, tetos } = lerTetos(c5, cs);
+  async function salvar() {
+    if (!ok || !d.trim()) return setErr("Confira a demanda e os tetos.");
+    const r = await api.editMission(id, { demanda: d.trim(), tetoPp: tetos.tetoPp ?? null, tetoSemanaPp: tetos.tetoSemanaPp ?? null });
+    if (!r.ok) return setErr(r.error);
+    setErr(undefined); setAberto(false); onSaved();
+  }
+  async function excluir() {
+    if (!window.confirm("Excluir esta missão e todos os seus arquivos? Não dá para desfazer.")) return;
+    const r = await api.deleteMission(id);
+    if (!r.ok) return setErr(r.error);
+    onDeleted();
+  }
+  return (
+    <div className="field">
+      <div className="row">
+        <button type="button" className="btn chico" onClick={() => { setD(demanda); setC5(tetoPp?.toString() ?? ""); setCs(tetoSemanaPp?.toString() ?? ""); setAberto(!aberto); }}>{aberto ? "Cancelar edição" : "Editar"}</button>
+        <button type="button" className="btn chico" onClick={() => void excluir()}>Excluir</button>
+      </div>
+      {aberto && (
+        <div className="field">
+          <label htmlFor="ed-dem">Demanda</label>
+          <textarea id="ed-dem" value={d} onChange={(e) => setD(e.target.value)} maxLength={20000} />
+          <TetosPlano cinco={c5} semana={cs} onCinco={setC5} onSemana={setCs} />
+          <button type="button" className="btn primario" onClick={() => void salvar()}>Salvar</button>
+        </div>
+      )}
+      {err && <p className="err" role="alert">{err}</p>}
+    </div>
   );
 }
