@@ -100,6 +100,7 @@ describe("podarVersoes", () => {
 describe("validarSugestoes", () => {
   const s = (rank: number, extra = {}) => ({ tema: `t${rank}`, motivo: "agora", rank, fontes: [{ url: "https://a.b", acessadoEm: iso }], ...extra });
   it("ordena por rank", () => expect(validarSugestoes([s(2), s(1)]).validas.map((x) => x.rank)).toEqual([1, 2]));
+  it("aceita acessadoEm só com a data", () => expect(validarSugestoes([s(1, { fontes: [{ url: "https://a.b", acessadoEm: "2026-11-24" }] })]).validas).toHaveLength(1));
   it("recusa sem fonte", () => {
     const r = validarSugestoes([s(1, { fontes: [] })]);
     expect(r.validas).toEqual([]);

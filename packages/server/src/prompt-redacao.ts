@@ -25,7 +25,7 @@ export function promptSugestoes(i: RedacaoInput): string {
     "Sugerir temas de artigo. Use só o researcher.",
     ...pedidoLinhas(i),
     "",
-    `Grave ${i.dir}/sugestoes.json: lista ranqueada de objetos { tema, motivo (por que vale agora), fontes: [{ url, acessadoEm (data ISO) }], rank }.`,
+    `Grave ${i.dir}/sugestoes.json: lista ranqueada de objetos { tema, motivo (por que vale agora), fontes: [{ url, acessadoEm (data ISO, ex.: 2026-11-24) }], rank }.`,
     "Nunca invente fonte; sem fonte localizada, não sugira o tema.",
     REGRA_FINAL,
   ].join("\n");

@@ -143,7 +143,7 @@ const Sugestao = z.object({
     .array(
       z.object({
         url: z.string().min(1, "fontes.url: obrigatório"),
-        acessadoEm: z.iso.datetime({ error: "fontes.acessadoEm: data ISO obrigatória" }),
+        acessadoEm: z.union([z.iso.datetime(), z.iso.date()], { error: "fontes.acessadoEm: data ISO obrigatória" }), // the model often writes just YYYY-MM-DD
       }),
       { error: "fontes: obrigatório" },
     )
