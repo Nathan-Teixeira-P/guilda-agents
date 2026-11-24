@@ -584,3 +584,5 @@ html[data-motion="off"] .toast { animation: none; }
 @media (max-width: 639px) { .toasts { bottom: 64px; } .sino-pop { width: auto; max-height: 75vh; } }
 .sino-rodape { position: sticky; bottom: calc(-1 * var(--e-4)); background: var(--noite-2); padding-bottom: var(--e-1); }
 .notif-opc .btn { justify-self: start; }
+.bolha3d .bolha3d-l { border-left: 3px solid var(--cor-ag, var(--bronze)); }
+.bolha3d-proj { font-weight: 500; color: var(--ouro); }

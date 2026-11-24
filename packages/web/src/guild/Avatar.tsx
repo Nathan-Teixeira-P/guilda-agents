@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { membro } from "../roster.ts";
+import { corDe, membro } from "../roster.ts";
 
 export type EstadoAvatar = "ativo" | "ocioso" | "concluido" | "falhou";
 
@@ -23,7 +23,7 @@ export function Avatar({ agente, vista = "frente", tamanho = 24, estado, oculto 
   const m = membro(agente);
   const id = useId();
   const grande = tamanho >= 64; // fold lines, hood rim and clasp: noise below this size
-  const cor = estado === "falhou" ? "var(--sangue)" : m.grupo.cor;
+  const cor = estado === "falhou" ? "var(--sangue)" : corDe(agente);
   const rotulo = `${m.codinome}, grupo ${m.grupo.nome}${estado === "falhou" ? ", falhou" : estado === "concluido" ? ", terminou" : estado === "ativo" ? ", em campo" : ""}`;
   const a11y = oculto ? { "aria-hidden": true as const } : { role: "img" as const, "aria-label": rotulo };
   return (

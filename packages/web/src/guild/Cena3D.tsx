@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { corDe } from "../roster.ts";
 import { derivarPainel, recadosNovos } from "../logic/escritorio.ts";
 import { exibido } from "../logic/frescor.ts";
 import { FICHA } from "../logic/guilda.ts";
@@ -13,7 +14,7 @@ interface Props { live: Live; selecionado?: string | undefined; onSelecionar: (t
 
 /** The 3D hall. Same simulation as the 2D scene (logic/escritorio.ts); three.js lives only in this lazy chunk. React renders the overlays; the canvas is driven imperatively. */
 export default function Cena3D({ live, selecionado, onSelecionar, onFalha }: Props) {
-  const painel = useMemo(() => derivarPainel(live.missions, live.events), [live.missions, live.events]);
+  const painel = useMemo(() => derivarPainel(live.missions, live.events, (id) => live.projects.find((p) => p.id === id)?.nome ?? id), [live.missions, live.events, live.projects]);
   const linhas = useMemo(() => linhasDe(painel.atividade, painel.tokens), [painel]);
   const calmo = useReduzido();
   const now = useNow();
@@ -74,9 +75,9 @@ export default function Cena3D({ live, selecionado, onSelecionar, onFalha }: Pro
             const marcado = selecionado === l.tecnico || hover === l.tecnico;
             const txt = l.estado === "falhou" ? "falhou" : l.ferramenta ?? "em campo";
             return (
-              <div key={l.tecnico} ref={ref(l.tecnico)} className={`bolha3d${l.estado === "falhou" ? " erro" : ""}${marcado ? " marcada" : ""}`} style={{ display: "none" }}>
+              <div key={l.tecnico} ref={ref(l.tecnico)} className={`bolha3d${l.estado === "falhou" ? " erro" : ""}${marcado ? " marcada" : ""}`} style={{ display: "none", ["--cor-ag" as string]: corDe(l.tecnico) }}>
                 {local === l.tecnico && <span className="bolha3d-local">local</span>}
-                {marcado && <strong>{l.codinome}</strong>}
+                {(marcado || (l.estado === "ativo" && l.projeto)) && <strong>{l.codinome}{l.projeto ? <span className="bolha3d-proj"> · {l.projeto}</span> : null}</strong>}
                 <span className="bolha3d-l"><span className={`mod3d m-${l.modelo}`}>{l.estado === "falhou" ? "!" : (FICHA[l.tecnico]?.modelo ?? l.modelo)[0]!.toUpperCase()}</span>{l.estado !== "ocioso" && <span>{txt.length > 14 ? `${txt.slice(0, 13)}…` : txt}</span>}</span>
               </div>
             );

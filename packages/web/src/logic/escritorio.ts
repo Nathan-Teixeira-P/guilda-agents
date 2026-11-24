@@ -117,7 +117,7 @@ const tamanho = (p: Planta, r: string[]) => r.reduce((s, id, i) => (i === 0 ? 0 
 export type Fase = "sentado" | "ocioso" | "andando";
 export type Motivo = "passeio" | "trabalho" | "recado";
 export interface Ator { id: string; x: number; y: number; face: 1 | -1; fase: Fase; rota: string[]; no: string; casa: string; espera: number; motivo: Motivo; carrega: boolean; pega?: string; dist: number }
-export interface Atividade { ativo: boolean; falhou: boolean; ferramenta?: string }
+export interface Atividade { ativo: boolean; falhou: boolean; ferramenta?: string; projeto?: string }
 export interface Recado { de: string; para: string }
 
 const VEL: Record<Motivo, number> = { passeio: 34, trabalho: 72, recado: 78 }; // px/s in viewbox units
@@ -221,7 +221,7 @@ const VIVAS = new Set(["intake", "planejando", "executando"]);
 export interface Painel { aoVivo: boolean; atividade: Record<string, Atividade>; tokens: Record<string, number> }
 
 /** What the hall shows, from the missions and this session's events. Only live missions make agents active; failures also stay visible on halted ones. */
-export function derivarPainel(ms: readonly M[], events: Record<string, readonly Ev[]>): Painel {
+export function derivarPainel(ms: readonly M[], events: Record<string, readonly Ev[]>, nomeProjeto: (id: string) => string = (id) => id): Painel {
   const atividade: Record<string, Atividade> = {};
   const tokens: Record<string, number> = {};
   const at = (t: string) => (atividade[t] ??= { ativo: false, falhou: false });
@@ -232,7 +232,8 @@ export function derivarPainel(ms: readonly M[], events: Record<string, readonly 
     const evs = events[m.id] ?? [];
     if (viva) {
       aoVivo = true;
-      at(m.stage === "intake" ? "intake" : m.stage === "planejando" ? "planner" : "orchestrator").ativo = true;
+      const x = at(m.stage === "intake" ? "intake" : m.stage === "planejando" ? "planner" : "orchestrator");
+      x.ativo = true; x.projeto = nomeProjeto(m.project);
     }
     const vistos = membrosDe(evs);
     const tipoDe = new Map(vistos.map((v) => [v.id, membro(v.tipo).tecnico]));
@@ -241,8 +242,9 @@ export function derivarPainel(ms: readonly M[], events: Record<string, readonly 
       const t = membro(v.tipo).tecnico;
       if (!ROSTER.some((r) => r.tecnico === t)) continue;
       if (v.estado === "falhou") at(t).falhou = true;
-      else if (v.estado === "ativo" && viva) { const x = at(t); x.ativo = true; if (v.ferramenta) x.ferramenta = v.ferramenta; }
+      else if (v.estado === "ativo" && viva) { const x = at(t); x.ativo = true; x.projeto = nomeProjeto(m.project); if (v.ferramenta) x.ferramenta = v.ferramenta; }
     }
+    if (viva) at("orchestrator").projeto = nomeProjeto(m.project);
     if (viva) for (let i = evs.length - 1; i >= 0; i--) { const e = evs[i]!; if (e.kind === "tool" && e.agent === "main") { at("orchestrator").ferramenta = e.name; break; } }
     for (const [id, n] of Object.entries(tokensVivos(evs).porAgente)) { const t = tipoDe.get(id); if (t) tokens[t] = (tokens[t] ?? 0) + n; }
     if (evs.length === 0) for (const [k, n] of Object.entries(m.tokensByAgent ?? {})) { const t = membro(k).tecnico; tokens[t] = (tokens[t] ?? 0) + n; }

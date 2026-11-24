@@ -3,6 +3,7 @@ import { Cena, fmtTokens, linhasDe, rotuloEstado, type Linha } from "../guild/Ce
 import { escolherVista, lerVista, type Vista } from "../logic/cena3d.ts";
 import { derivarPainel } from "../logic/escritorio.ts";
 import { FICHA } from "../logic/guilda.ts";
+import { Avatar } from "../guild/Avatar.tsx";
 import { membro } from "../roster.ts";
 import type { Live } from "../store.ts";
 
@@ -17,7 +18,7 @@ function temWebgl() {
 
 /** The scene with its status line, the agent card and (optionally) the text alternative. Shared by the Escritório screen and the Salão. */
 export function Escritorio({ live, lista = true }: { live: Live; lista?: boolean }) {
-  const painel = useMemo(() => derivarPainel(live.missions, live.events), [live.missions, live.events]);
+  const painel = useMemo(() => derivarPainel(live.missions, live.events, (id) => live.projects.find((p) => p.id === id)?.nome ?? id), [live.missions, live.events, live.projects]);
   const linhas = useMemo(() => linhasDe(painel.atividade, painel.tokens), [painel]);
   const [sel, setSel] = useState<string>();
   useEffect(() => {
@@ -67,6 +68,7 @@ function Ficha({ l, onFechar }: { l: Linha; onFechar: () => void }) {
         <h3>{l.codinome} <span className="muted">· {m.grupo.nome}</span></h3>
         <p>{FICHA[l.tecnico]?.funcao}</p>
         <dl>
+          {l.projeto && <div><dt>Projeto</dt><dd>{l.projeto}</dd></div>}
           <div><dt>Sala</dt><dd>{l.sala}</dd></div>
           <div><dt>Modelo</dt><dd><span className={`pill gu-m-${l.modelo}`}>{l.modelo}</span></dd></div>
           <div><dt>Estado</dt><dd className={l.estado === "falhou" ? "err" : ""}>{rotuloEstado(l)}</dd></div>
@@ -91,7 +93,7 @@ function Lista({ linhas, sel, onSel }: { linhas: Linha[]; sel: string | undefine
               {linhas.filter((l) => l.sala === s).map((l) => (
                 <li key={l.tecnico}>
                   <button type="button" className={`cena-item ${l.estado}`} aria-pressed={sel === l.tecnico} onClick={() => onSel(sel === l.tecnico ? undefined : l.tecnico)}>
-                    <strong>{l.codinome}</strong> <span className="muted">{rotuloEstado(l)}</span>
+                    <Avatar agente={l.tecnico} tamanho={20} oculto /> <strong>{l.codinome}</strong> <span className="muted">{rotuloEstado(l)}{l.projeto ? ` · ${l.projeto}` : ""}</span>
                   </button>
                 </li>
               ))}

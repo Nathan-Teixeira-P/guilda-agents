@@ -40,6 +40,12 @@ export const ROSTER: readonly Membro[] = [
   { tecnico: "deal-auditor", codinome: "Tesoureiro", grupo: G.operacao },
 ];
 
+/** Individual accent per agent (golden-angle hue by roster position): the group keeps its insignia shape, each member gets its own color. */
+export function corDe(tecnico: string): string {
+  const i = ROSTER.findIndex((m) => m.tecnico === (tecnico === "main" ? "orchestrator" : tecnico));
+  return i < 0 ? "#6b6f75" : `hsl(${Math.round((i * 137.5) % 360)} 52% 62%)`;
+}
+
 const RECRUTA: Membro = { tecnico: "", codinome: "Recruta", grupo: { id: "recruta", nome: "Sem grupo", cor: "#6b6f75" } };
 const BY_NAME = new Map(ROSTER.map((m) => [m.tecnico, m]));
 

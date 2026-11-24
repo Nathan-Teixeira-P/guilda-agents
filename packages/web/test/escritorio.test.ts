@@ -97,7 +97,7 @@ describe("painel", () => {
   it("marks active, failed and tools; empty hall when nothing runs", () => {
     const p = derivarPainel([m("executando")], evs);
     expect(p.aoVivo).toBe(true);
-    expect(p.atividade["coder"]).toEqual({ ativo: true, falhou: false, ferramenta: "Edit" });
+    expect(p.atividade["coder"]).toEqual({ ativo: true, falhou: false, ferramenta: "Edit", projeto: expect.any(String) });
     expect(p.atividade["tester"]?.falhou).toBe(true);
     expect(p.atividade["planner"]?.ativo).toBeFalsy();
     expect(p.atividade["orchestrator"]?.ferramenta).toBe("Task");

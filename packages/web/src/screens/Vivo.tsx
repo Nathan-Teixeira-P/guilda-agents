@@ -103,6 +103,7 @@ export function Vivo({ m, live, onChange }: { m: M; live: Live; onChange: () => 
           </section>
           <section className="panel" aria-labelledby="mb-t">
             <h2 id="mb-t">Membros convocados</h2>
+            <p className="hint">Em campo no projeto <strong>{live.projects.find((p) => p.id === m.project)?.nome ?? m.project}</strong></p>
             {membros.length === 0 ? <p className="hint">Ninguém convocado ainda.</p> : (
               <ul className="lista-simples">{membros.map((x) => <li key={x.id}><Membro agente={x.tipo || "?"} tamanho={24} estado={x.estado} /> <span className={x.estado === "falhou" ? "err" : "muted"}>{ESTADO[x.estado]}{x.ferramenta ? ` · ${x.ferramenta}` : ""}</span><span className="sr-only"> {membro(x.tipo).grupo.nome}</span></li>)}</ul>
             )}

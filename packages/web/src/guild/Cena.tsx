@@ -10,13 +10,13 @@ const PLANTA = montarPlanta();
 const EMBLEMA = `${import.meta.env.BASE_URL}emblem-ntp.png`;
 const FPS_MS = 1000 / 30;
 
-export interface Linha { tecnico: string; codinome: string; sala: string; modelo: string; estado: "ativo" | "falhou" | "ocioso"; ferramenta?: string; tokens?: number }
+export interface Linha { tecnico: string; codinome: string; sala: string; modelo: string; estado: "ativo" | "falhou" | "ocioso"; ferramenta?: string; tokens?: number; projeto?: string }
 /** One row per agent, in the order of the hall (also the tab order). Shared with the text alternative. */
 export function linhasDe(a: Record<string, Atividade>, tokens: Record<string, number>): Linha[] {
   const ordem = [...CENTRAL, ...PLANTA.salas.flatMap((s) => s.agentes)];
   return ordem.map((t) => {
     const x = a[t];
-    return { tecnico: t, codinome: membro(t).codinome, sala: PLANTA.sala[t] === "mesa" ? "Mesa do Regente" : PLANTA.salas.find((s) => s.id === PLANTA.sala[t])!.nome, modelo: FICHA[t]?.modelo ?? "sonnet", estado: x?.falhou ? "falhou" : x?.ativo ? "ativo" : "ocioso", ...(x?.ferramenta ? { ferramenta: x.ferramenta } : {}), ...(tokens[t] ? { tokens: tokens[t] } : {}) };
+    return { tecnico: t, codinome: membro(t).codinome, sala: PLANTA.sala[t] === "mesa" ? "Mesa do Regente" : PLANTA.salas.find((s) => s.id === PLANTA.sala[t])!.nome, modelo: FICHA[t]?.modelo ?? "sonnet", estado: x?.falhou ? "falhou" : x?.ativo ? "ativo" : "ocioso", ...(x?.ferramenta ? { ferramenta: x.ferramenta } : {}), ...(x?.ativo && x.projeto ? { projeto: x.projeto } : {}), ...(tokens[t] ? { tokens: tokens[t] } : {}) };
   });
 }
 export const rotuloEstado = (l: Linha) => (l.estado === "falhou" ? "Falhou" : l.estado === "ativo" ? (l.ferramenta ? `Em campo, usando ${l.ferramenta}` : "Em campo") : "Ocioso");
@@ -154,7 +154,7 @@ function Bolha({ l, local }: { l: Linha; local?: boolean }) {
 
 /** The guild hall scene. Movement is driven imperatively from one rAF loop (no React renders per frame); React only renders when the live state changes. */
 export function Cena({ live, selecionado, onSelecionar }: { live: Live; selecionado?: string | undefined; onSelecionar: (t: string | undefined) => void }) {
-  const painel = useMemo(() => derivarPainel(live.missions, live.events), [live.missions, live.events]);
+  const painel = useMemo(() => derivarPainel(live.missions, live.events, (id) => live.projects.find((p) => p.id === id)?.nome ?? id), [live.missions, live.events, live.projects]);
   const linhas = useMemo(() => linhasDe(painel.atividade, painel.tokens), [painel]);
   const calmo = useReduzido();
   const sim = useRef<ReturnType<typeof criarSim>>(undefined as never);
