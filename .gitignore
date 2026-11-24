@@ -1,0 +1,15 @@
+node_modules/
+missions/
+workspaces/
+packages/web/dist/
+.vitest/
+redacao/
+local.json
+local-stats.jsonl
+notificacoes.jsonl
+notificador-estado.json
+usage.json
+usage-auto-stats.json
+projects.json
+.env
+.claude/scheduled_tasks.lock
