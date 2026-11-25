@@ -34,6 +34,7 @@ export function promptFase1(i: Fase1Input): string {
     ...(i.relatorio
       ? [`- REPORT-ONLY demand: you never analyze or write it yourself: delegate through the agents (explorer to map, then reviewer, read-only, to check against the demand; each saves its output at the path you give), then save ${out}/handoff/relatorio.md from their results (findings with evidence) and ${out}/handoff/plan.md saying this is report-only, with no code changes. No PRD or specs.`]
       : ["- Default flow: analyze the demand, plan, then PRD and specs, so that phase 2 writes the code right after the user seals. Even when the demand reads like an analysis (\"check whether X was done\"), delegate the analysis to the agents in phase 1 and make the plan/specs the concrete changes to make; the plan is never just an audit."]),
+    `- UI demand (new or changed screen/page): after the planner, call frontend-architect (opus) to write the design doc ${out}/design/<feature>.design.md AND a visual model of the page at ${out}/design/mockup.html: ONE self-contained HTML file, inline CSS only, no scripts, no external requests or fonts, desktop and phone widths, real labels and states (no lorem ipsum). The user approves the look from it when sealing; the specs must follow it.`,
     "- Never commit or push. Do not edit the project. If spec-checker fails, send the problems back to spec-writer once.",
   ];
   return lines.join("\n");

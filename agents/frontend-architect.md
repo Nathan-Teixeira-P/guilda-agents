@@ -24,6 +24,9 @@ Documento de design (Markdown) no diretório de saída informado, com:
 - Desempenho e microinterações.
 - Onde a interface pode surpreender: caminho mais curto para a tarefa principal e densidade de informação.
 
+## Modelo visual
+Em tela nova ou alterada, grave também `design/mockup.html` (no diretório de saída): UM arquivo HTML autocontido, só CSS inline, sem `<script>`, sem requisições externas nem fontes remotas, responsivo (desktop e celular), com rótulos e estados reais (sem lorem ipsum). É o que o usuário aprova ao selar; o usuário pode levá-lo ao Canva ou ao Claude Design (Share › Export › Send to).
+
 ## Limites
 - Leia o projeto antes de propor: stack, `CLAUDE.md`, telas, componentes e tokens existentes.
 - Não edite código: só Read, Grep, Glob e Write (apenas o documento de design).

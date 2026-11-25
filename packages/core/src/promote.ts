@@ -35,7 +35,9 @@ export function planPromotion(files: readonly StagedFile[]): PromotionPlan {
     if (segs.length < 2 || !(PROMOTE_DIRS as readonly string[]).includes(segs[0]!))
       return no(`destination folder not allowed: ${JSON.stringify(p)}`);
     const base = segs[segs.length - 1]!;
-    if (!(PROMOTE_EXTS as readonly string[]).includes(extname(base).toLowerCase()) || base.startsWith("."))
+    const ext = extname(base).toLowerCase();
+    const htmlOk = ext === ".html" && segs[0] === "design"; // visual mockup, shown only in a script-less sandboxed iframe
+    if (!((PROMOTE_EXTS as readonly string[]).includes(ext) || htmlOk) || base.startsWith("."))
       return no(`extension not allowed: ${JSON.stringify(p)}`);
     if (!Number.isFinite(f.size) || f.size < 0) return no(`invalid size: ${JSON.stringify(p)}`);
     if (f.size > MAX_FILE_BYTES) return no(`file too large: ${JSON.stringify(p)}`);

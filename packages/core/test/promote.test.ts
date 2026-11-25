@@ -41,6 +41,12 @@ describe("planPromotion", () => {
     refused([f("prd/.md")]);
   });
 
+  it("accepts .html only under design/", () => {
+    expect(planPromotion([f("design/mockup.html")]).ok).toBe(true);
+    refused([f("prd/mockup.html")]);
+    refused([f("handoff/x.html")]);
+  });
+
   it("refuses a subfolder outside the closed list, or a top-level file", () => {
     refused([f("src/a.md")]);
     refused([f("PRD/a.md")]);

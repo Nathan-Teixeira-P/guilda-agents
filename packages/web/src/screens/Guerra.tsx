@@ -166,6 +166,12 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
         <div className="miolo">
           {gateState(m) === "selado" && <div className="seal-cravado" title="Missão selada"><Seal tamanho={64} /></div>}
           {carregando && !files ? <div className="leitura" aria-busy="true" aria-label="Carregando pacote"><div className="skeleton claro" /><div className="skeleton claro" /></div>
+            : atual && /\.html$/i.test(atual.path) ? (
+              <div className="leitura">
+                <iframe title={`Modelo visual: ${atual.path}`} sandbox="" srcDoc={atual.content} style={{ width: "100%", height: "70vh", border: "1px solid var(--borda, #ccc)", background: "#fff" }} />
+                <p className="hint">Modelo visual da página, sem scripts. Para o Canva: abra o arquivo no Claude Design e use Share › Export › Send to.</p>
+              </div>
+            )
             : atual ? <Leitor texto={atual.content} titulo={atual.path} />
             : <div className="leitura"><p>Nada para ler ainda. {aguardando ? "" : "O pacote aparece quando o reconhecimento termina."}</p></div>}
         </div>
