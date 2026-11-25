@@ -11,7 +11,7 @@ import { newMission, transition, type Mission } from "@lab/core/src/mission.ts";
 import { normalizar, PROJECT_ID, analisarProjeto, analisarSubida, resolverProjeto, validarClickupUrl, validarComando, validarOrigem, type LeitorProjeto, type Projeto } from "@lab/core/src/projects.ts";
 import { checkPasta, cloneRepo, type CloneResult } from "./clone.ts";
 import { promoteDraft } from "./promote.ts";
-import { promptFase1, promptFase2, promptContinuacao, instrucaoResumo } from "./prompt.ts";
+import { promptFase1, promptFase2, promptContinuacao, instrucaoRelatorio, instrucaoResumo } from "./prompt.ts";
 import { promptFase1Redacao, promptFase2Redacao, promptSugestoes } from "./prompt-redacao.ts";
 import { createProjectsStore, lerRetomada, type ProjectsStore } from "./projects-store.ts";
 import type { RunOpts, RunOutcome } from "./runner.ts";
@@ -67,7 +67,7 @@ const NewProject = z.object({
   apelidos: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
   clickupListUrl: z.string().max(2048).refine(validarClickupUrl, "must be an https://app.clickup.com url").optional(),
 });
-const NewMission = z.object({ project: z.string().min(1).max(100), demanda: z.string().min(1).max(20_000), tetoUsd: z.number().positive().max(1000).optional(), tetoPp: z.number().positive().max(100).optional(), tetoSemanaPp: z.number().positive().max(100).optional(), confirmarUso: z.boolean().optional(), analise: z.boolean().optional() });
+const NewMission = z.object({ project: z.string().min(1).max(100), demanda: z.string().min(1).max(20_000), tetoUsd: z.number().positive().max(1000).optional(), tetoPp: z.number().positive().max(100).optional(), tetoSemanaPp: z.number().positive().max(100).optional(), confirmarUso: z.boolean().optional(), relatorio: z.boolean().optional() });
 const Resumo = z.object({ feito: z.array(z.string().max(1000)).max(50), pendente: z.array(z.string().max(1000)).max(50), acaoUsuario: z.array(z.string().max(1000)).max(50) });
 const Ponto = z.object({ percentual: z.number(), reiniciaEm: z.number() });
 const UsoInicial = z.object({ cincoHoras: Ponto, semana: Ponto });
@@ -204,7 +204,7 @@ export function createServer(o: ServerOpts) {
   /** The user stepped in (approve/adjust/resume): clear the breaker counters. */
   const intervene = (m: Mission): Mission => ({ ...m, loops: {}, handoffs: 0 });
 
-  const resumoPath = (m: Mission) => join(projectPath(m) ?? "", ".claude", "handoff", `resumo-${m.id}.json`);
+  const resumoPath = (m: Mission) => join(store.dirOf(m.id), "resumo", "resumo.json");
   /** Never throws: a missing or malformed wrap-up just means no summary card. */
   const lerResumo = (p: string) => {
     try { const r = Resumo.safeParse(JSON.parse(readFileSync(p, "utf8"))); return r.success ? r.data : undefined; } catch { return undefined; }
@@ -223,11 +223,12 @@ export function createServer(o: ServerOpts) {
     const comandos = registry.get(m.project)?.comandos ?? [];
     const plano = planoDe(m); // no caps: no limit; no baseline: first reading becomes the baseline
     if (phase === 2 && comandos.length === 0) publish("warning", { missionId: m.id, message: "sem comandos de teste configurados: a fase 2 roda sem Bash" });
+    if (phase === 2) rmSync(resumoPath(m), { force: true }); // a stale wrap-up must never pass for this run
     const stopWatch = watchDirs({ mission: store.dirOf(m.id), project: join(proj, ".claude") }, (e) => publish("file", { missionId: m.id, ...e }));
     const done = (async () => {
       try {
         const out = await o.runner({
-          phase, mission: m, projectDir: proj, missionsDir: store.dir, prompt: phase === 2 ? `${prompt}\n${instrucaoResumo(resumoPath(m))}` : prompt, tetoUsd: teto, now: clock, signal: ac.signal, ...(plano ? { plano } : {}),
+          phase, mission: m, projectDir: proj, missionsDir: store.dir, prompt: phase === 2 ? `${prompt}\n${m.kind === "relatorio" ? `${instrucaoRelatorio}\n` : ""}${instrucaoResumo(resumoPath(m))}` : prompt, tetoUsd: teto, now: clock, signal: ac.signal, ...(plano ? { plano } : {}),
           ...(o.agent ? { agent: o.agent } : {}), ...(phase === 2 ? { ...(specsOf(m).length === 0 && !continuacao ? { semResume: true } : {}), testCommands: comandos, ...(o.hubDir ? { hubDir: o.hubDir } : {}) } : {}),
           onEvent: (e: StreamEvent) => {
             if (e.kind === "rate-limit") usage.alimentar(e);
@@ -268,6 +269,7 @@ export function createServer(o: ServerOpts) {
       ...(p ? { notas: lerRetomada(p, store).notes } : {}),
       ...(comment ? { comentario: comment } : {}),
       ...(retomada ? { retomada } : {}),
+      ...(m.kind === "relatorio" ? { relatorio: true } : {}),
     });
   };
 
@@ -742,7 +744,7 @@ export function createServer(o: ServerOpts) {
       if (!livre.ok && b.confirmarUso !== true) throw Object.assign(new HttpError(409, livre.motivo), { extra: { motivo: livre.motivo, uso: usageView() } });
       const usoInicial = uso.estado === "ok" ? { cincoHoras: { percentual: uso.cincoHoras.percentual, reiniciaEm: uso.cincoHoras.reiniciaEm }, semana: { percentual: uso.semana.percentual, reiniciaEm: uso.semana.reiniciaEm } } : undefined;
       const id = `m-${randomBytes(6).toString("hex")}`;
-      const m: Mission = { ...newMission(id, projectId!, clock), ...(b.analise ? { kind: "analise" as const } : {}), demanda: b.demanda, tetoUsd: b.tetoUsd ?? DEFAULT_TETO_USD, ...(b.tetoPp !== undefined ? { tetoPp: b.tetoPp } : {}), ...(b.tetoSemanaPp !== undefined ? { tetoSemanaPp: b.tetoSemanaPp } : {}), ...(usoInicial ? { usoInicial } : {}) };
+      const m: Mission = { ...newMission(id, projectId!, clock), ...(b.relatorio ? { kind: "relatorio" as const } : {}), demanda: b.demanda, tetoUsd: b.tetoUsd ?? DEFAULT_TETO_USD, ...(b.tetoPp !== undefined ? { tetoPp: b.tetoPp } : {}), ...(b.tetoSemanaPp !== undefined ? { tetoSemanaPp: b.tetoSemanaPp } : {}), ...(usoInicial ? { usoInicial } : {}) };
       const planning = transition(m, "planejando", { now: clock }); // persisted now: the runner only writes at the end
       save(planning);
       launch(planning, 1, prompt1(planning));

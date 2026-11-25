@@ -19,7 +19,7 @@ export function Nova({ live, route }: { live: Live; route: Route }) {
   const [demanda, setDemanda] = useState("");
   const [teto, setTeto] = useState("");
   const [tetoSem, setTetoSem] = useState("");
-  const [analise, setAnalise] = useState(false);
+  const [relatorio, setRelatorio] = useState(false);
   const [tentou, setTentou] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string>();
@@ -36,7 +36,7 @@ export function Nova({ live, route }: { live: Live; route: Route }) {
     if (erros.projeto || erros.demanda || erros.teto || !projeto) return;
     setBusy(true);
     setErr(undefined);
-    const r = await api.newMission({ project: projeto.id, demanda: demanda.trim(), ...tetos, ...(analise ? { analise: true } : {}), ...(confirmarUso ? { confirmarUso: true } : {}) });
+    const r = await api.newMission({ project: projeto.id, demanda: demanda.trim(), ...tetos, ...(relatorio ? { relatorio: true } : {}), ...(confirmarUso ? { confirmarUso: true } : {}) });
     setBusy(false);
     if (!r.ok && r.status === 409) return setMotivoUso(r.error);
     if (!r.ok) return setErr(r.status === 0 ? "O servidor está fora do ar. Nada foi enviado." : `O servidor recusou a missão: ${r.error}`);
@@ -81,7 +81,7 @@ export function Nova({ live, route }: { live: Live; route: Route }) {
         <textarea id="nm-dem" value={demanda} onChange={(e) => setDemanda(e.target.value)} maxLength={20000} aria-invalid={tentou && !!erros.demanda} aria-describedby={tentou && erros.demanda ? "nm-dem-e nm-dem-h" : "nm-dem-h"} />
         <p id="nm-dem-h" className="hint">{dicaEntrada(demanda)}</p>
         {tentou && erros.demanda && <p id="nm-dem-e" className="err">{erros.demanda}</p>}
-        <label><input type="checkbox" checked={analise} onChange={(e) => setAnalise(e.target.checked)} /> É uma análise (depois, oferece começar a codar a partir dela)</label>
+        <label><input type="checkbox" checked={relatorio} onChange={(e) => setRelatorio(e.target.checked)} /> Só relatório (não mexe no código). Sem marcar: plano, PRD e specs e, ao selar, o código.</label>
       </div>
 
       <TetosPlano cinco={teto} semana={tetoSem} onCinco={setTeto} onSemana={setTetoSem} tentou={tentou} />

@@ -14,6 +14,7 @@ import { reduzido } from "../prefs.ts";
 import { ConfirmDialog } from "../ui/ConfirmDialog.tsx";
 import { Leitor } from "../ui/Leitor.tsx";
 import { PausaPanel } from "../ui/PausaPanel.tsx";
+import { resumoVazio } from "../logic/resumo.ts";
 
 type Resumo = { feito: string[]; pendente: string[]; acaoUsuario: string[] };
 
@@ -25,6 +26,7 @@ function ResumoCard({ r }: { r: Resumo }) {
       {itens.length ? <ul>{itens.map((i, k) => <li key={k}>{i}</li>)}</ul> : <p className="hint">{vazio}</p>}
     </section>
   );
+  if (resumoVazio(r)) return <p className="muted">Nada a registrar.</p>;
   return (
     <div className="resumo" style={{ display: "grid", gap: "var(--e-3)", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", margin: "var(--e-3) 0" }}>
       {col("Feito", r.feito, "ok", "Nada registrado.", "✓")}
@@ -98,16 +100,6 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
     setSeg(""); onChange();
     go(`/missao/${encodeURIComponent(m.id)}`);
   }
-  async function codar() {
-    setBusy(true); setErro(undefined);
-    const arqs = (m.promoted ?? []).join(", ");
-    const demanda = `Comece a implementar, de acordo com a análise da missão ${m.id} (concluída).\n\nDemanda original da análise:\n${String((m as unknown as Record<string, unknown>)["demanda"] ?? "")}\n\nA análise está em: ${arqs || "(sem arquivos promovidos; leia o pacote da missão)"}.\nImplemente só o que a análise apontou como faltante ou divergente.`;
-    const r = await api.newMission({ project: m.project, demanda: demanda.slice(0, 20_000) });
-    setBusy(false);
-    if (!r.ok) { setErro(erroDeAcao(r)); return; }
-    go(`/missao/${encodeURIComponent(r.data.id)}`);
-  }
-
   const veredito = (
     <aside className="veredito" aria-label="Veredito">
       <h2>Veredito</h2>
@@ -128,9 +120,6 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
           <summary>Arquivos promovidos ({m.promoted!.length})</summary>
           <ul className="lista-simples">{m.promoted!.map((p) => <li key={p} className="mono">{p}</li>)}</ul>
         </details>
-      )}
-      {m.stage === "concluida" && (m as unknown as Record<string, unknown>)["kind"] === "analise" && (
-        <button type="button" className="btn primario" disabled={busy} onClick={codar}>Começar a codar a partir desta análise</button>
       )}
       {recusado && <div className="selo-recusado"><Seal rachado tamanho={64} /></div>}
       {erro && <p className="err" role="alert">{erro}</p>}
@@ -153,15 +142,6 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
       {m.stage === "pausada" && <PausaPanel m={m} onDone={onChange} />}
       {m.stage === "parada" && <PausaPanel m={m} onDone={onChange} />}
       {m.stage === "concluida" && <p className="panel field ok" role="status">Missão concluída. O pacote continua disponível para leitura.</p>}
-      {m.stage === "concluida" && (m as unknown as Record<string, unknown>)["kind"] !== "redacao" && (
-        <section className="panel field" aria-labelledby="seg-t">
-          <h2 id="seg-t">Continuar esta missão</h2>
-          <p className="hint">Peça outra coisa na mesma conversa: o agente retoma a sessão e lembra do que foi feito.</p>
-          <label htmlFor="seg-c" className="sr-only">Próximo pedido</label>
-          <textarea id="seg-c" value={seg} onChange={(e) => setSeg(e.target.value)} maxLength={20000} style={{ minHeight: 90 }} />
-          <button type="button" className="btn primario" disabled={busy || !seg.trim()} onClick={continuar}>Continuar</button>
-        </section>
-      )}
       {m.stage === "concluida" && (() => { const r = (m as unknown as { resumo?: Resumo }).resumo; return r ? <ResumoCard r={r} /> : <p className="hint">Esta missão não gerou resumo (missões anteriores a este recurso, ou o agente não o escreveu).</p>; })()}
       <div className={`guerra${carimbando ? " tranco" : ""}`}>
         <nav className="indice" aria-label="Pacote da missão">
@@ -191,6 +171,15 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
         </div>
         {veredito}
       </div>
+      {m.stage === "concluida" && (m as unknown as Record<string, unknown>)["kind"] !== "redacao" && (
+        <section className="panel field" aria-labelledby="seg-t">
+          <h2 id="seg-t">Continuar esta missão</h2>
+          <p className="hint">Peça outra coisa na mesma conversa: o agente retoma a sessão e lembra do que foi feito.</p>
+          <label htmlFor="seg-c" className="sr-only">Próximo pedido</label>
+          <textarea id="seg-c" value={seg} onChange={(e) => setSeg(e.target.value)} maxLength={20000} style={{ minHeight: 90 }} />
+          <button type="button" className="btn primario" disabled={busy || !seg.trim()} onClick={continuar}>Continuar</button>
+        </section>
+      )}
       {aguardando && mobile && (
         <div className="barra-fixa">
           <button type="button" className="btn" onClick={() => comentRef.current?.focus()}>Ajustes</button>

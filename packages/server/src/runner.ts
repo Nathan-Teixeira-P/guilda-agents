@@ -1,4 +1,4 @@
-import { spawn as nodeSpawn, type ChildProcessByStdio } from "node:child_process";
+import { spawn as nodeSpawn, spawnSync, type ChildProcessByStdio } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
@@ -78,18 +78,26 @@ function motivoRedacao(o: RunOpts): string | undefined {
 export function missionPaths(o: Pick<RunOpts, "missionsDir" | "mission">) {
   if (!ID.test(o.mission.id)) throw new Error(`invalid mission id: ${o.mission.id}`);
   const missionDir = join(absPath(o.missionsDir, "missionsDir"), o.mission.id);
-  return { missionDir, staging: join(missionDir, "out") };
+  return { missionDir, staging: join(missionDir, "out"), resumoDir: join(missionDir, "resumo") };
 }
 
 /** Missions run without the ponytail plugin (~1.9k tokens per turn); other hooks (rtk, network routes) stay on. */
 const CLICKUP_READ = ["get_task", "get_task_comments", "get_list", "search", "filter_tasks", "get_threaded_comments", "download_task_attachment"].map((t) => `mcp__clickup__clickup_${t}`); // same list as agents/intake.md, read-only
 const NO_PONYTAIL = JSON.stringify({ enabledPlugins: { "ponytail@ponytail": false } });
 
+/** The user's rtk PreToolUse hook rewrites e.g. `npx tsc --noEmit` to `rtk tsc --noEmit`, which then misses the allow rule and is denied in dontAsk mode (for subagents too). Allow that exact rewritten form as well. */
+function rtkForm(c: string): string | undefined {
+  // `rtk rewrite` exits 3 when it rewrites, so read stdout whatever the status
+  const r = spawnSync("rtk", ["rewrite", c], { encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] });
+  const out = (r.stdout ?? "").trim(); // rtk absent: stdout is null, out is ""
+  return /^rtk [\w@./: =-]+$/.test(out) && out !== c ? out : undefined;
+}
+
 /** Pure: builds the argv for `claude -p`. Always an explicit --permission-mode; never bypassPermissions. */
 export function buildArgs(o: RunOpts, sessionId: string): string[] {
   const project = absPath(o.projectDir, "projectDir");
   if (o.mission.kind === "redacao") return buildArgsRedacao(o, sessionId, project);
-  const { staging } = missionPaths(o);
+  const { staging, resumoDir } = missionPaths(o);
   const budget = Math.max(o.tetoUsd - o.mission.costUsd, 0.0001).toFixed(4);
   const args = ["-p", o.prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", "dontAsk"];
   if (o.agent) args.push("--agent", o.agent);
@@ -110,14 +118,16 @@ export function buildArgs(o: RunOpts, sessionId: string): string[] {
       if (!sid) throw new Error("phase 2 needs mission.sessionId from phase 1");
       args.push("--resume", sid);
     }
-    const tests = (o.testCommands ?? []).map((c) => {
+    const tests = (o.testCommands ?? []).flatMap((c) => {
       if (!validarComando(c)) throw new Error(`unsafe test command: ${c}`); // closed-format allow-list, fails closed
-      return `Bash(${c}:*)`;
+      const r = rtkForm(c);
+      return r ? [`Bash(${c}:*)`, `Bash(${r}:*)`] : [`Bash(${c}:*)`];
     });
     const script = o.hubDir ? join(absPath(o.hubDir, "hubDir"), "scripts", "local.ts") : undefined;
     const local = script ? ["run", "compact-test-log", "list-relevant-files"].map((t) => `Bash(node ${script} ${t}:*)`) : [];
     const git = ["status", "diff", "log"].map((c) => `Bash(git ${c}:*)`); // read-only: lets a resumed run audit what was already done
-    args.push("--allowedTools", "Read", "Glob", "Grep", rulePath(project), ...tests, ...local, ...git);
+    args.push("--add-dir", resumoDir); // the only place outside the project phase 2 may write: the wrap-up card
+    args.push("--allowedTools", "Read", "Glob", "Grep", rulePath(project), rulePath(resumoDir), ...tests, ...local, ...git);
     args.push("--disallowedTools", ...["git commit", "git push", "gh", "curl", "wget", "ssh", "scp"].map((c) => `Bash(${c}:*)`), "WebFetch", ...deny);
   }
   return args;
@@ -166,7 +176,7 @@ const defaultSpawn: SpawnFn = (file, args, o) =>
   nodeSpawn(file, args, { cwd: o.cwd, ...(o.env ? { env: o.env } : {}), stdio: ["ignore", "pipe", "pipe"] }); // no shell; stdin = /dev/null
 
 export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Promise<RunOutcome> {
-  const { missionDir, staging } = missionPaths(o);
+  const { missionDir, staging, resumoDir } = missionPaths(o);
   const artigo = o.mission.kind === "redacao"; // article: state lives in artigo.json, saved by the caller
   let m = o.mission;
   if (o.phase === 1) {
@@ -176,6 +186,7 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
     // fail closed: the seal is re-read here, not trusted from the caller
     if (!isApproved(missionDir)) throw new Error("approval gate not open: phase 2 refused");
     if (m.stage !== "executando") m = transition(m, "executando", { now: o.now, approved: true });
+    if (!artigo) mkdirSync(resumoDir, { recursive: true });
   }
   const fresca = o.phase === 1 || o.semResume === true;
   const sessionId = o.phase === 1 ? (m.sessionId ?? randomUUID()) : o.semResume ? randomUUID() : (m.sessionId ?? "");
@@ -211,7 +222,7 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
       for (let i = 0; i < d.calls.local - statsAntes.calls.local; i++) comLocal = recordLocal(comLocal, { via: "local", tokensSaved: i === 0 ? d.tokensSavedEstimate - statsAntes.tokensSavedEstimate : 0 });
       for (let i = 0; i < d.calls.fallback - statsAntes.calls.fallback; i++) comLocal = recordLocal(comLocal, { via: "claude-fallback" });
     }
-    out.mission = { ...comLocal, costUsd: priorCost + budget.totalUsd, tokensByAgent: out.tokensByAgent, subagentTypes: out.subagentTypes, costByModel: out.costByModel, ...(out.consumo ? { consumo: { ...(comLocal["consumo"] as object | undefined), [String(o.phase)]: out.consumo } } : {}), handoffs: bs.handoffs, loops: bs.loops, ...(erroCapa() ? { erroCapa: erroCapa() } : {}) };
+    out.mission = { ...comLocal, costUsd: priorCost + budget.totalUsd, tokensByAgent: out.tokensByAgent, subagentTypes: out.subagentTypes, costByModel: out.costByModel, ...(out.consumo ? { consumo: { ...(comLocal["consumo"] as object | undefined), [String(o.phase)]: out.consumo } } : {}), handoffs: bs.handoffs, loops: bs.loops, ...(out.denials.length ? { denials: out.denials.slice(0, 10).map((d) => ({ tool: d.toolName, input: JSON.stringify(d.toolInput ?? null).slice(0, 300) })) } : {}), ...(erroCapa() ? { erroCapa: erroCapa() } : {}) };
     if (stopped) out.stopped = stopped;
     if (!artigo) {
       mkdirSync(missionDir, { recursive: true });
