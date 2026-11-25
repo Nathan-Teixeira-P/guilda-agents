@@ -83,3 +83,10 @@ describe("result consumption", () => {
     expect(parseLine(line)[0]).toMatchObject({ kind: "result", numTurns: 7, usage: { input: 5, output: 6, cacheRead: 700, cacheCreation: 80 } });
   });
 });
+
+describe("permission_denied", () => {
+  it("becomes a denied event for the subagent that was refused", () => {
+    const l = JSON.stringify({ type: "system", subtype: "permission_denied", tool_name: "Bash", agent_id: "a1", session_id: "s" });
+    expect(parseLine(l)).toEqual([{ kind: "denied", agent: "a1", tool: "Bash" }]);
+  });
+});

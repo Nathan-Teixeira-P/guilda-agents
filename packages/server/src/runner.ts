@@ -48,6 +48,7 @@ export interface RunOutcome {
   subagentTypes: Record<string, string>; // agent id -> codename (`subagent_type`), sibling of tokensByAgent so old readers still see numbers
   costByModel: Record<string, number>;
   denials: Result["permissionDenials"];
+  negados: { agent: string; tool: string; command: string }[]; // permission denials seen in the stream, subagents included, with the command tried
   consumo?: { turns?: number; input: number; output: number; cacheRead: number; cacheCreation: number }; // measured per phase: where the plan usage goes
 }
 
@@ -120,8 +121,9 @@ export function buildArgs(o: RunOpts, sessionId: string): string[] {
     }
     const tests = (o.testCommands ?? []).flatMap((c) => {
       if (!validarComando(c)) throw new Error(`unsafe test command: ${c}`); // closed-format allow-list, fails closed
-      const r = rtkForm(c);
-      return r ? [`Bash(${c}:*)`, `Bash(${r}:*)`] : [`Bash(${c}:*)`];
+      const base = /^npx tsc\b/.test(c) ? "npx tsc" : c; // tsc: any arguments (-p, --noEmit, a project path...)
+      const r = rtkForm(base);
+      return r ? [`Bash(${base}:*)`, `Bash(${r}:*)`] : [`Bash(${base}:*)`];
     });
     const script = o.hubDir ? join(absPath(o.hubDir, "hubDir"), "scripts", "local.ts") : undefined;
     const local = script ? ["run", "compact-test-log", "list-relevant-files"].map((t) => `Bash(node ${script} ${t}:*)`) : [];
@@ -195,7 +197,7 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
   const remaining = o.tetoUsd - priorCost;
   let bs: BreakerState = { loops: m.loops, handoffs: m.handoffs }; // seeded from mission.json; loops come from there plus `VOLTA <spec>` lines the orchestrator emits (main agent text)
 
-  const out: RunOutcome = { mission: m, unknownLines: 0, tokensByAgent: {}, subagentTypes: {}, costByModel: {}, denials: [] };
+  const out: RunOutcome = { mission: m, unknownLines: 0, tokensByAgent: {}, subagentTypes: {}, costByModel: {}, denials: [], negados: [] };
   /** Phase 2 of an article: the SVG is kept, but a missing PNG is reported clearly. */
   const erroCapa = () => {
     if (!artigo || o.phase !== 2 || out.lastResult?.isError || to2 !== "concluida") return undefined;
@@ -222,7 +224,7 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
       for (let i = 0; i < d.calls.local - statsAntes.calls.local; i++) comLocal = recordLocal(comLocal, { via: "local", tokensSaved: i === 0 ? d.tokensSavedEstimate - statsAntes.tokensSavedEstimate : 0 });
       for (let i = 0; i < d.calls.fallback - statsAntes.calls.fallback; i++) comLocal = recordLocal(comLocal, { via: "claude-fallback" });
     }
-    out.mission = { ...comLocal, costUsd: priorCost + budget.totalUsd, tokensByAgent: out.tokensByAgent, subagentTypes: out.subagentTypes, costByModel: out.costByModel, ...(out.consumo ? { consumo: { ...(comLocal["consumo"] as object | undefined), [String(o.phase)]: out.consumo } } : {}), handoffs: bs.handoffs, loops: bs.loops, ...(out.denials.length ? { denials: out.denials.slice(0, 10).map((d) => ({ tool: d.toolName, input: JSON.stringify(d.toolInput ?? null).slice(0, 300) })) } : {}), ...(erroCapa() ? { erroCapa: erroCapa() } : {}) };
+    out.mission = { ...comLocal, costUsd: priorCost + budget.totalUsd, tokensByAgent: out.tokensByAgent, subagentTypes: out.subagentTypes, costByModel: out.costByModel, ...(out.consumo ? { consumo: { ...(comLocal["consumo"] as object | undefined), [String(o.phase)]: out.consumo } } : {}), handoffs: bs.handoffs, loops: bs.loops, ...(out.negados.length ? { negados: out.negados } : {}), ...(erroCapa() ? { erroCapa: erroCapa() } : {}) };
     if (stopped) out.stopped = stopped;
     if (!artigo) {
       mkdirSync(missionDir, { recursive: true });
@@ -256,6 +258,7 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
   let baselineSemana: Ponto | undefined = o.plano?.inicioSemana; // plan-usage baseline (spec 018)
   const tokensByMsg = new Map<string, { agent: string; total: number }>(); // assistant blocks repeat the same message id
   let anon = 0;
+  const ultimoBash = new Map<string, string>();
   const tripBreaker = () => {
     const injected = o.breaker?.get();
     const s = injected ? { ...injected, handoffs: bs.handoffs } : bs;
@@ -275,7 +278,10 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
       fezTrabalho = true;
       if (e.subagentType) out.subagentTypes[e.agentId] = e.subagentType;
       bs = recordHandoff(bs, o.now);
+    } else if (e.kind === "denied") { // the denial event carries no input: pair it with that agent's last Bash command
+      if (out.negados.length < 10) out.negados.push({ agent: e.agent, tool: e.tool, command: ultimoBash.get(e.agent) ?? "" });
     } else if (e.kind === "tool") {
+      if (e.command) ultimoBash.set(e.agent, e.command.slice(0, 300));
       if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(e.name)) fezTrabalho = true;
       if (e.command && usaLocal(e.command)) chamadasLocal++;
     } else if (e.kind === "text") {

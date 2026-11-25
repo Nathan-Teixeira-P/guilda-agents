@@ -17,6 +17,7 @@ export type StreamEvent =
   | { kind: "usage"; messageId: string; agent: string; model?: string; tokens: Tokens }
   | { kind: "text"; agent: string; text: string }
   | { kind: "tool"; agent: string; name: string; command?: string }
+  | { kind: "denied"; agent: string; tool: string }
   | { kind: "subagent-started"; agentId: string; toolUseId?: string; subagentType?: string }
   | { kind: "subagent-progress"; agentId: string; subagentType?: string; totalTokens?: number }
   | { kind: "subagent-finished"; agentId: string; toolUseId?: string; status?: string; totalTokens?: number }
@@ -108,6 +109,10 @@ export function parseLine(line: string): StreamEvent[] {
     if (!r.success) return bad(type);
     const d = r.data;
     return [{ kind: "init", sessionId: d.session_id, ...(d.model ? { model: d.model } : {}), ...(d.permissionMode ? { permissionMode: d.permissionMode } : {}) }];
+  }
+  if (type === "system" && subtype === "permission_denied") {
+    const tool = (json as { tool_name?: unknown }).tool_name;
+    return [{ kind: "denied", agent, tool: typeof tool === "string" ? tool : "?" }];
   }
   if (type === "system" && subtype === "task_started") {
     const r = TaskStarted.safeParse(json);
