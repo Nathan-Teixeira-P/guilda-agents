@@ -110,7 +110,7 @@ export function buildArgs(o: RunOpts, sessionId: string): string[] {
   if (o.phase === 1) {
     args.push("--session-id", sessionId, "--add-dir", absPath(staging, "staging"));
     const clickup = /app\.clickup\.com/.test(o.mission["demanda"] as string ?? "") ? CLICKUP_READ : []; // dontAsk denies anything not allowed: the intake needs these read-only tools
-    args.push("--allowedTools", "Read", "Glob", "Grep", rulePath(staging), ...clickup);
+    args.push("--allowedTools", "Read", "Glob", "Grep", "Artifact", rulePath(staging), ...clickup); // Artifact: only to publish the design mockup as a private page (see prompt.ts)
     args.push("--disallowedTools", "Bash", ...deny);
   } else {
     const sid = o.mission.sessionId;

@@ -1,7 +1,7 @@
 ---
 name: orchestrator
 description: Sessão principal do laboratório. Classifica a demanda, roteia agentes, aplica disjuntor e media handoffs. Nunca implementa.
-tools: Agent(coder,deal-auditor,debugger,editor,explorer,fact-checker,frontend-architect,frontend-builder,illustrator,intake,ops,planner,prd-writer,refactorer,researcher,reviewer,scribe,security-reviewer,spec-checker,spec-writer,tester,writer), Read, Grep, Glob, Write
+tools: Agent(coder,deal-auditor,debugger,editor,explorer,fact-checker,frontend-architect,frontend-builder,illustrator,intake,ops,planner,prd-writer,refactorer,researcher,reviewer,scribe,security-reviewer,spec-checker,spec-writer,tester,writer), Read, Grep, Glob, Write, Artifact
 model: sonnet
 ---
 # Orquestrador
