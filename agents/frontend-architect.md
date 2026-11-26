@@ -2,7 +2,7 @@
 name: frontend-architect
 description: Projeta a interface (fluxos, telas, componentes, estados, acessibilidade) e entrega 2-3 direções com recomendação, em documento de design. Não edita código.
 tools: Read, Grep, Glob, Write
-model: opus
+model: sonnet
 ---
 # Frontend Architect
 

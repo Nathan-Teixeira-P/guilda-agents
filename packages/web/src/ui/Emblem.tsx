@@ -69,7 +69,7 @@ export function Consultar({ onConsultar }: { onConsultar: Props["onConsultar"] }
   return (
     <div className="emblem-consulta">
       <button type="button" className="btn chico" disabled={busy} onClick={async () => { setBusy(true); setMsg(undefined); const e = await onConsultar(); setBusy(false); if (e) setMsg(erroConsulta(e.status, e.error)); }}>{busy ? "Consultando…" : "Consultar agora"}</button>
-      <p className="hint">Gasta uma chamada mínima do plano (cerca de US$ 0,002). Só roda quando você pede.</p>
+      <p className="hint">Gasta uma chamada mínima do plano. Só roda quando você pede.</p>
       {msg && <p className="err" role="alert">{msg}</p>}
     </div>
   );

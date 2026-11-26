@@ -1,3 +1,4 @@
+import { ehComando } from "./logic/events.ts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Projeto } from "./api.ts";
 import type { M } from "./logic/stages.ts";
@@ -17,6 +18,7 @@ export interface Live {
   local?: LocalStatus; // local model (Ollama): GET /local/status + SSE `local`; undefined = unavailable (not configured / old server)
   localStats?: LocalStats;
   recarregarLocal: () => Promise<void>;
+  carregarEventos: (missionId: string) => Promise<void>; // replay of GET /missions/:id/eventos
   projects: Projeto[];
   artigos: Artigo[]; // articles (Redação): GET /redacao + SSE `artigo`
   loading: boolean;
@@ -73,6 +75,7 @@ export function useLive(): Live {
 
   useEffect(() => {
     let buffer: Record<string, unknown>[] = [];
+    const comandos = new Set<string>(); // ids of background commands
     let evBuf: { id: string; e: Ev }[] = [];
     let timer: ReturnType<typeof setTimeout> | undefined;
     let needRefetch = false;
@@ -138,7 +141,7 @@ export function useLive(): Live {
         if (name === "usage" && data && typeof data === "object") { setUsage(data as Uso); return; }
         if (name === "progress" && data && typeof data === "object") {
           const p = data as { missionId?: unknown; event?: unknown };
-          if (typeof p.missionId === "string" && p.event && typeof p.event === "object") { evBuf.push({ id: p.missionId, e: p.event as Ev }); timer ??= setTimeout(flush, BATCH_MS); }
+          if (typeof p.missionId === "string" && p.event && typeof p.event === "object" && !ehComando(p.event as Ev, comandos)) { evBuf.push({ id: p.missionId, e: p.event as Ev }); timer ??= setTimeout(flush, BATCH_MS); }
           return;
         }
         if (name !== "mission" || !data || typeof data !== "object") return;
@@ -169,7 +172,16 @@ export function useLive(): Live {
     return r.status === 0 ? "Servidor fora do ar." : `Não foi possível salvar: ${r.error}`;
   }, []);
 
-  return { missions, usage, auto, definirAuto, local, localStats, recarregarLocal, consultarUso, projects, artigos, loading, error, up, retryInSec, lastOkAt, warnings, events, missionWarnings, reload: () => void reload(), retryNow: () => conn.current?.retryNow() };
+  // ponytail: replaces the live buffer with the server history; an event landing mid-request can be missing until the next reload
+  const carregarEventos = useCallback(async (id: string) => {
+    const r = await api.eventos(id);
+    if (!r.ok || r.data.eventos.length === 0) return;
+    const comandos = new Set<string>();
+    const lista = (r.data.eventos as Ev[]).filter((e) => !ehComando(e, comandos)).slice(-MAX_EVENTS);
+    setEvents((cur) => ({ ...cur, [id]: lista }));
+  }, []);
+
+  return { carregarEventos, missions, usage, auto, definirAuto, local, localStats, recarregarLocal, consultarUso, projects, artigos, loading, error, up, retryInSec, lastOkAt, warnings, events, missionWarnings, reload: () => void reload(), retryNow: () => conn.current?.retryNow() };
 }
 
 /** Re-renders on the minute boundary, for relative times. */

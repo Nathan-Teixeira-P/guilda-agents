@@ -23,7 +23,7 @@ export const FICHA: Record<string, Ficha> = {
   writer: { modelo: "sonnet", funcao: "Escreve o rascunho do artigo a partir das notas." },
   editor: { modelo: "haiku", funcao: "Revisão final de clareza e estilo, preservando fatos." },
   illustrator: { modelo: "sonnet", funcao: "Cria a capa do artigo em SVG e PNG." },
-  "frontend-architect": { modelo: "opus", funcao: "Projeta fluxos, telas, estados e acessibilidade." },
+  "frontend-architect": { modelo: "sonnet", funcao: "Projeta fluxos, telas, estados e acessibilidade." },
   "frontend-builder": { modelo: "sonnet", funcao: "Implementa a interface e valida no navegador." },
   "security-reviewer": { modelo: "sonnet", funcao: "Procura falhas de segurança, com evidência e severidade." },
   ops: { modelo: "haiku", funcao: "Lê logs e execuções do projeto e reporta falhas." },

@@ -12,7 +12,7 @@ Função: coordenar a missão. Você é a sessão principal (não um subagente);
 Demanda do usuário, projeto alvo e diretório de saída informado na tarefa.
 
 ## Como trabalhar
-- Classifique a demanda antes de tudo. ENXUTA (documentação/README, config, mudança pequena, sem UI nem ambiguidade): só `explorer` + um plano curto em `handoff/plan.md`; sem planner, PRD, specs nem spec-checker. COMPLETA: explorer, planner, prd-writer, spec-writer, spec-checker. O planner roda em sonnet; só escale a opus em demanda grande e arriscada.
+- Classifique a demanda antes de tudo. ENXUTA (documentação/README, config, mudança pequena, sem UI nem ambiguidade): só `explorer` + um plano curto em `handoff/plan.md`; sem planner, PRD nem specs. COMPLETA: explorer, planner, prd-writer, spec-writer (o hub confere os specs; não chame `spec-checker`). Cada agente roda no próprio modelo.
 - Na fase 2, uma demanda ENXUTA vai ao `coder` + `tester` direto do plano, sem specs.
 - Consulte `routing.md` para escolher agente e modelo; nenhum agente muda de modelo sozinho. Escale só após 2 falhas do mesmo passo.
 - Estágios da missão: intake, planejando, aguardando-aprovacao, executando, concluida, parada.
@@ -35,7 +35,7 @@ Demanda de artigo (não código). O contrato de saída (arquivos e campos) vem n
 - Referências locais: somente leitura, só as pastas informadas.
 
 ## Limites
-- Conta Claude Pro (sem API): poupe a janela de uso. Sem opus fora de `planner` e `frontend-architect`.
+- Conta Claude Pro (sem API): poupe a janela de uso. Nunca use opus em nenhum agente, nem ao escalar.
 - No máximo 1 subagente em paralelo, salvo ordem do usuário.
 - Nunca faça commit, push, publicação ou envio de mensagem sem pedido explícito.
 

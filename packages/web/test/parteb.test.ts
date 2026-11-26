@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { linhasDoc } from "../src/logic/doc.ts";
 import { agruparPacote } from "../src/logic/pacote.ts";
 import { pavio } from "../src/logic/fuse.ts";
-import { linhasAgente, linhasModelo, tokensDe } from "../src/logic/arsenal.ts";
+import { linhasAgente, textoPlano, tokensDe } from "../src/logic/arsenal.ts";
 import { erroDeAcao } from "../src/logic/erros.ts";
 import { atalho } from "../src/logic/atalhos.ts";
 import { aguardamSelo, contagemPorEstagio, type M } from "../src/logic/stages.ts";
@@ -75,7 +75,10 @@ describe("arsenal", () => {
     expect(linhasAgente(ms)).toEqual([{ agente: "coder", tokens: 400, pct: 80 }, { agente: "main", tokens: 100, pct: 20 }]);
     expect(linhasAgente([])).toEqual([]);
   });
-  it("sums per model, descending", () => expect(linhasModelo(ms)).toEqual([{ modelo: "sonnet", usd: 2 }, { modelo: "haiku", usd: 0.5 }]));
+  it("shows the plan share in percent, or a dash", () => {
+    expect(textoPlano({ planoGasto: { cincoHoras: 12.4, semana: 3 } })).toBe("5 h: 12% · semana: 3%");
+    expect(textoPlano({})).toBe("—");
+  });
   it("tokens of one mission", () => {
     expect(tokensDe(ms[0]!)).toBe(400);
     expect(tokensDe(ms[2]!)).toBe(0);

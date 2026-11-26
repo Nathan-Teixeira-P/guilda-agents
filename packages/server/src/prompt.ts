@@ -29,16 +29,32 @@ export function promptFase1(i: Fase1Input): string {
     "Rules:",
     `- Only write files under ${out}. Use ${out}/handoff/briefing.md (the intake briefing, when the demand is a ClickUp link), ${out}/handoff/map.md, ${out}/handoff/plan.md, ${out}/prd/<feature>.prd.md, ${out}/specs/NNN-<name>.spec.md and ${out}/specs/INDEX.md.`,
     "- Pass file paths to agents, never file contents. Tell each agent its output path.",
-    "- Subagents cannot create subagents: you call them yourself, one at a time, in this order: explorer, planner, prd-writer, spec-writer, spec-checker. Explorer cannot write files: save its map to the map path yourself.",
-    "- First classify the demand. LEAN (docs/README, config, one-file or small change, no UI, no ambiguity): call only explorer (haiku) and write one short plan to the plan path; no planner, PRD, specs or spec-checker. FULL (several modules, UI, ambiguity): the whole chain above, with planner on sonnet unless the demand is clearly large and risky (then pass model opus to planner).",
+    "- Subagents cannot create subagents: you call them yourself, one at a time, in this order: explorer, planner, prd-writer, spec-writer. Explorer cannot write files: save its map to the map path yourself.",
+    "- Map: ask explorer for one line per relevant file: `path` (lines): symbols there, pattern to copy (max 40; may exceed 10 lines). Later agents read it first and search only for what it lacks.",
+    "- First classify the demand. LEAN (docs/README, config, one-file or small change, no UI, no ambiguity): call only explorer (haiku) and write one short plan to the plan path; no planner, PRD, specs. FULL (several modules, UI, ambiguity): the whole chain above, with every agent on its own model; never pass model opus to any agent.",
     ...(i.relatorio
       ? [`- REPORT-ONLY demand: you never analyze or write it yourself: delegate through the agents (explorer to map, then reviewer, read-only, to check against the demand; each saves its output at the path you give), then save ${out}/handoff/relatorio.md from their results (findings with evidence) and ${out}/handoff/plan.md saying this is report-only, with no code changes. No PRD or specs.`]
       : ["- Default flow: analyze the demand, plan, then PRD and specs, so that phase 2 writes the code right after the user seals. Even when the demand reads like an analysis (\"check whether X was done\"), delegate the analysis to the agents in phase 1 and make the plan/specs the concrete changes to make; the plan is never just an audit."]),
-    `- UI demand (new or changed screen/page): after the planner, call frontend-architect (opus) to write the design doc ${out}/design/<feature>.design.md AND a visual model of the page at ${out}/design/mockup.html: ONE self-contained HTML file, inline CSS only, no scripts, no external requests or fonts, desktop and phone widths, real labels and states (no lorem ipsum). The user approves the look from it when sealing; the specs must follow it. Then YOU publish that file once with the Artifact tool (file_path = the mockup, title = the feature name; it starts private, never share it) and save its link as one line in ${out}/design/mockup-link.md. If the Artifact tool is unavailable or fails, skip it and say so in the plan.`,
-    "- Never commit or push. Do not edit the project. If spec-checker fails, send the problems back to spec-writer once.",
+    `- UI demand (new or changed screen/page): after the planner, call frontend-architect to write the design doc ${out}/design/<feature>.design.md AND a visual model of the page at ${out}/design/mockup.html: ONE self-contained HTML file, inline CSS only, no scripts, no external requests or fonts, desktop and phone widths, real labels and states (no lorem ipsum). The user approves the look from it when sealing; the specs must follow it. Then YOU publish that file once with the Artifact tool (file_path = the mockup, title = the feature name; it starts private, never share it) and save its link as one line in ${out}/design/mockup-link.md. If the Artifact tool is unavailable or fails, skip it and say so in the plan.`,
+    "- Never commit or push. Do not edit the project. No spec-checker: the hub checks specs.",
   ];
   return lines.join("\n");
 }
+
+/** Appended to phase 2: spec-to-spec handoff and the exact Bash allow-list, so coders do not burn turns on re-exploring or on denied commands. */
+export const instrucaoExecucao = (comandos: string[], goTest?: string) =>
+  [
+    "After each spec's coder, call tester: it runs the checks for what changed and compares with the spec's acceptance criteria. Only a pass moves to the next spec; anything failing or missing goes back to the coder first. Failures in code outside the spec do not block: list them as pending.",
+    "When a spec passes, write on its own line exactly `OK <spec-number>` (never otherwise).",
+    ...(goTest ? [
+      "Builds are the user's job: no agent compiles anything (no go build, go test or the test script) before the user has built. Finish writing the specs you can first, then ask once for the whole block: write on its own line exactly `BUILD <command>` and stop there. For Go use `BUILD CGO_ENABLED=1 go test -p 1 -run '^$' ./pkg/<dir>/ ...` (the touched packages).",
+      `Only after the user confirms the build: tester runs \`${goTest} ./pkg/<dir>/ [-run Name] [-v]\`. If it is killed (exit 124, 137, 143) or times out, do not retry: report it as pending.`,
+    ] : ["If something only works after a build, never build: write on its own line exactly `BUILD <command>` and stop; the user runs it and resumes."]),
+    "Handoff: do not call explorer for each spec; tell each agent to read .claude/handoff/map.md first, if it exists, and search only for what it does not cover. Give each coder its spec path plus the previous coder's short report (what was created, decisions made, up to 10 lines).",
+    comandos.length
+      ? `Tell every coder and tester: the only project commands allowed are ${comandos.map((c) => `\`${c}\``).join(", ")}, plus read-only \`git status|diff|log\`${goTest ? " and the Go test script above" : ""}. Run each alone, written exactly like that. Anything else is denied: do not retry it or try variants; report it as pending for the user.`
+      : "No project commands are configured: agents have no test Bash. Report unverified work as pending for the user.",
+  ].join("\n");
 
 /** Appended to phase 2: the agent leaves a short, structured wrap-up that the UI shows when the contract is fulfilled. */
 export const instrucaoRelatorio = "Report-only mission: do NOT modify the project's code or files. Delegate to no coder: only have the `scribe` write the wrap-up.";

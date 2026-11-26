@@ -108,7 +108,7 @@ export function PedidoRedacao({ live, inicial, onCriado }: { live: Live; inicial
       {est && (
         <section className="rd-estimativa" aria-label="Estimativa de uso" aria-live="polite">
           <h3>Antes de começar</h3>
-          <p>{definido ? "Artigo" : "Pesquisa de temas"} de cerca de {est.palavras} palavras. Teto de custo: US$ {est.tetoUsd}.</p>
+          <p>{definido ? "Artigo" : "Pesquisa de temas"} de cerca de {est.palavras} palavras.</p>
           {!est.livre.ok && <p className="warn" role="note"><strong>Atenção:</strong> {est.livre.motivo ?? "o uso do plano está alto agora."}</p>}
           {est.livre.ok && <p className="hint ok">Há folga no plano agora.</p>}
           <TetosPlano cinco={teto} semana={tetoSem} onCinco={setTeto} onSemana={setTetoSem} />

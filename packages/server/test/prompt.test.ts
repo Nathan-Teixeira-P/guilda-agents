@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NOTES_PROMPT_LIMIT, promptFase1, promptFase2 } from "../src/prompt.ts";
+import { NOTES_PROMPT_LIMIT, promptFase1, promptFase2, instrucaoExecucao } from "../src/prompt.ts";
 
 const base = { demanda: "add a CLI", stagingDir: "/m/m-1/out", projetoPath: "/p/proj" };
 
@@ -16,9 +16,9 @@ describe("promptFase1", () => {
     expect(p).toMatch(/one at a time/i);
     expect(p).toMatch(/LEAN.*no planner, PRD, specs/);
   });
-  it("names the sequence explorer, planner, prd-writer, spec-writer, spec-checker", () => {
+  it("names the sequence explorer, planner, prd-writer, spec-writer", () => {
     const p = promptFase1(base);
-    const at = ["explorer", "planner", "prd-writer", "spec-writer", "spec-checker"].map((n) => p.indexOf(n));
+    const at = ["explorer", "planner", "prd-writer", "spec-writer"].map((n) => p.indexOf(n));
     expect(at.every((i) => i >= 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
   });
@@ -59,5 +59,15 @@ describe("promptFase2 resume comment", () => {
 describe("promptFase2 without specs", () => {
   it("points at the approved plan", () => {
     expect(promptFase2({ specs: [], projetoPath: "/p" })).toContain("/p/.claude/handoff/plan.md");
+  });
+});
+
+describe("instrucaoExecucao", () => {
+  it("lists the allowed commands, or says there are none", () => {
+    expect(instrucaoExecucao(["npm test"])).toContain("`npm test`");
+    expect(instrucaoExecucao([])).toContain("No project commands");
+    expect(instrucaoExecucao([])).toContain("OK <spec-number>");
+    expect(instrucaoExecucao([], "/hub/scripts/go-test.sh")).toContain("/hub/scripts/go-test.sh ./pkg/");
+    expect(instrucaoExecucao([], "/g")).toContain("BUILD <command>");
   });
 });

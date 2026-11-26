@@ -20,6 +20,14 @@ export function consumo(inicial: Ponto, atual: Ponto): number {
   return atual.reiniciaEm !== inicial.reiniciaEm ? atual.percentual : Math.max(0, atual.percentual - inicial.percentual);
 }
 
+export type Gasto = { cincoHoras: number; semana: number };
+type Leitura = { cincoHoras: Ponto; semana: Ponto };
+/** Adds one run's share of both windows. The windows are the account's, so other activity in the meantime counts too. */
+export const somarGasto = (antes: Gasto | undefined, ini: Leitura, fim: Leitura): Gasto => ({
+  cincoHoras: (antes?.cincoHoras ?? 0) + consumo(ini.cincoHoras, fim.cincoHoras),
+  semana: (antes?.semana ?? 0) + consumo(ini.semana, fim.semana),
+});
+
 /** Fails closed: an invalid cap stops the mission. */
 export function deveParar(inicio: Ponto, atual: Ponto, tetoPp: number): boolean {
   if (!Number.isFinite(tetoPp) || tetoPp <= 0) return true;

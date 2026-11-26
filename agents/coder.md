@@ -15,6 +15,7 @@ Caminho do spec, caminho do mapa do `explorer`, caminho do handoff anterior (se 
 Código e testes no projeto alvo; relatório curto em arquivo (o que mudou, comandos rodados, pendências).
 
 ## Limites
+- Leia o mapa do `explorer` primeiro; busque só o que ele não cobre.
 - Um spec por vez. Se a tarefa crescer ou houver ambiguidade, devolva STATUS bloqueado em vez de se estender.
 - TDD: escreva o teste primeiro, veja falhar, implemente, veja passar.
 - Subagente não cria subagente: use o mapa recebido; se faltar algo, peça ao orquestrador. Leia só o necessário.

@@ -1,10 +1,10 @@
 # Routing
 
-Lab runs on a single Claude Pro account (no API). The real limit is plan usage (5-hour and weekly windows), so: prefer sonnet/haiku, opus rarely, and at most 1 subagent in parallel by default.
+Lab runs on a single Claude Pro account (no API). The real limit is plan usage (5-hour and weekly windows), so: prefer sonnet/haiku, no opus for now, and at most 1 subagent in parallel by default.
 
 ## Models
 
-- opus: only `frontend-architect`, plus `planner` when the orchestrator escalates a large, risky demand.
+- opus: disabled for now; no agent uses it, not even on escalation.
 - sonnet: code, review, PRD, spec, research, writing, `frontend-builder`, `illustrator`.
 - haiku: reading, checking, summarizing.
 
@@ -15,7 +15,7 @@ Lab runs on a single Claude Pro account (no API). The real limit is plan usage (
 | `orchestrator` | sonnet |
 | `intake` | haiku |
 | `planner` | sonnet |
-| `frontend-architect` | opus |
+| `frontend-architect` | sonnet |
 | `prd-writer` | sonnet |
 | `spec-writer` | sonnet |
 | `spec-checker` | haiku |
@@ -42,7 +42,7 @@ Lab runs on a single Claude Pro account (no API). The real limit is plan usage (
 
 ## Classification
 
-LEAN demands (docs, config, one-file or small change) run `explorer` + a short plan only: no planner, PRD or specs. FULL demands run the whole chain.
+The hub checks drafted specs mechanically; `spec-checker` is not part of the mission chain. LEAN demands (docs, config, one-file or small change) run `explorer` + a short plan only: no planner, PRD or specs. FULL demands run the whole chain.
 
 ## Escalation
 

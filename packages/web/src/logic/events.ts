@@ -4,6 +4,7 @@ import type { M } from "./stages.ts";
 /** Subset of StreamEvent (packages/server/src/stream.ts) that the UI reads. */
 export type Ev =
   | { kind: "tool"; agent: string; name: string }
+  | { kind: "text"; agent: string; text: string }
   | { kind: "subagent-started"; agentId: string; subagentType?: string }
   | { kind: "subagent-finished"; agentId: string; status?: string }
   | { kind: "result"; isError: boolean; text: string; modelUsage: Record<string, number>; permissionDenials: unknown[] }
@@ -20,9 +21,9 @@ export function gateState(m: Pick<M, "stage" | "pausedFrom">): Gate {
   return m.stage === "pausada" && m.pausedFrom === "executando" ? "selado" : "fechado";
 }
 
-/** "Where did it spend the most": the top agent's share of tokens across missions, plus its most expensive model overall. */
-export function ondeMaisGastou(ms: readonly M[]): { agente: string; pct: number; modelo?: string } | undefined {
-  const sum = (key: "tokensByAgent" | "costByModel") => {
+/** "Where did it spend the most": the top agent's share of tokens across missions, across missions. */
+export function ondeMaisGastou(ms: readonly M[]): { agente: string; pct: number } | undefined {
+  const sum = (key: "tokensByAgent") => {
     const t: Record<string, number> = {};
     for (const m of ms) for (const [k, v] of Object.entries(m[key] ?? {})) t[k] = (t[k] ?? 0) + v;
     return Object.entries(t).sort((a, b) => b[1] - a[1]);
@@ -31,8 +32,13 @@ export function ondeMaisGastou(ms: readonly M[]): { agente: string; pct: number;
   const total = agents.reduce((n, [, v]) => n + v, 0);
   const top = agents[0];
   if (!top || total <= 0) return undefined;
-  const modelo = sum("costByModel")[0]?.[0];
-  return { agente: top[0], pct: Math.round((top[1] / total) * 100), ...(modelo ? { modelo } : {}) };
+  return { agente: top[0], pct: Math.round((top[1] / total) * 100) };
+}
+
+/** Long Bash commands also arrive as "subagent" events, without a type: drop them. `comandos` remembers their ids so the finish is dropped too. */
+export function ehComando(e: Ev, comandos: Set<string>): boolean {
+  if (e.kind === "subagent-started" && !e.subagentType) comandos.add(e.agentId);
+  return (e.kind === "subagent-started" || e.kind === "subagent-finished") && comandos.has(e.agentId);
 }
 
 /** Stream events to human lines. Repeated tool calls by the same agent are grouped; `desconhecido` is hidden. */
@@ -67,7 +73,16 @@ export function cronicaDe(events: readonly Ev[]): Linha[] {
 }
 
 /** Chained handoffs seen in this session (the breaker's own count lives in the server; this is what the UI witnessed). */
-export const contarTrocas = (events: readonly Ev[]): number => events.filter((e) => e.kind === "subagent-started").length;
+// mirrors the server breaker: an `OK <spec>` line from the main agent (once per spec) restarts the chain
+export function contarTrocas(events: readonly Ev[]): number {
+  const ok = new Set<string>();
+  let n = 0;
+  for (const e of events) {
+    if (e.kind === "subagent-started") n++;
+    else if (e.kind === "text" && e.agent === "main") for (const x of e.text.matchAll(/^OK\s+([\w.-]+)\s*$/gm)) if (!ok.has(x[1]!)) { ok.add(x[1]!); n = 0; }
+  }
+  return n;
+}
 
 /** Live token use from `usage` events: deduped by message id (the last report of a message wins, as in the runner). */
 export function tokensVivos(events: readonly Ev[]) {

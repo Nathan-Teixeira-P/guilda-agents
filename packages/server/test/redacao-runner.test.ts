@@ -72,7 +72,7 @@ afterEach(async () => { await srv.close(); });
 describe("buildArgs (article)", () => {
   const dir = "/hub/redacao/tema";
   const m = (sessionId?: string): Mission => ({ ...transition(newMission("tema", "redacao", now), "planejando", { now }), kind: "redacao", ...(sessionId ? { sessionId } : {}) });
-  const base = (phase: 1 | 2, leitura: string[] = []): RunOpts => ({ phase, mission: m(phase === 2 ? "sid" : undefined), projectDir: dir, missionsDir: "/hub/redacao", prompt: "go", tetoUsd: 5, now, redacao: { hubDir: "/hub", leitura } });
+  const base = (phase: 1 | 2, leitura: string[] = []): RunOpts => ({ phase, mission: m(phase === 2 ? "sid" : undefined), projectDir: dir, missionsDir: "/hub/redacao", prompt: "go", now, redacao: { hubDir: "/hub", leitura } });
   const split = (a: string[]) => ({ allow: a.slice(a.indexOf("--allowedTools") + 1, a.indexOf("--disallowedTools")), deny: a.slice(a.indexOf("--disallowedTools") + 1) });
 
   it("phase 1: web for research, writes only in the folder, no Bash at all", () => {
@@ -114,7 +114,7 @@ describe("gate", () => {
     const dir = join(root, "redacao", "t");
     mkdirSync(dir, { recursive: true });
     const m: Mission = { ...transition(transition(newMission("t", "redacao", now), "planejando", { now }), "aguardando-aprovacao", { now }), kind: "redacao", sessionId: "sid" };
-    const o: RunOpts = { phase: 2, mission: m, projectDir: dir, missionsDir: join(root, "redacao"), prompt: "go", tetoUsd: 5, now, redacao: { hubDir: hub, leitura: [] } };
+    const o: RunOpts = { phase: 2, mission: m, projectDir: dir, missionsDir: join(root, "redacao"), prompt: "go", now, redacao: { hubDir: hub, leitura: [] } };
     await expect(runPhase(o, { spawn })).rejects.toThrow(/approval gate/);
     writeFileSync(join(dir, "approved"), "{}"); // invalid seal
     await expect(runPhase(o, { spawn })).rejects.toThrow(/approval gate/);

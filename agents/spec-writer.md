@@ -16,6 +16,8 @@ Um arquivo por spec com frontmatter (title, number, priority, tags, dependencies
 Atualize o `INDEX.md` do mesmo diretório com cada spec novo.
 
 ## Limites
+- Antes de responder, confira: toda história do PRD coberta; em Implementation Tasks, cada arquivo tocado em item de lista começando por `caminho`.
+- Leia o mapa do `explorer` primeiro; busque só o que ele não cobre.
 - Máximo 5 arquivos tocados por spec; se passar, divida e declare dependências.
 - Tarefas pequenas, verificáveis, com ordem clara; sem caminhos inventados.
 - Sem Bash nem Edit; Write só no diretório de saída informado.

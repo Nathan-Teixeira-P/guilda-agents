@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { groupByStage, STAGE_ORDER, type M } from "../src/logic/stages.ts";
 import { consumoPp, faixa, formatDesde, formatTempoRestante } from "../src/logic/time.ts";
-import { cronicaDe, gateState, ondeMaisGastou } from "../src/logic/events.ts";
+import { cronicaDe, gateState, ondeMaisGastou, ehComando, contarTrocas, type Ev } from "../src/logic/events.ts";
 
 const m = (id: string, stage: M["stage"], updatedAt = "2026-01-01T00:00:00Z"): M => ({ id, project: "p", stage, costUsd: 0, createdAt: updatedAt, updatedAt });
 
@@ -70,7 +70,7 @@ describe("ondeMaisGastou", () => {
       { ...m("a", "concluida"), tokensByAgent: { coder: 300, tester: 100 }, costByModel: { sonnet: 3 } },
       { ...m("b", "concluida"), tokensByAgent: { coder: 100 }, costByModel: { sonnet: 1, haiku: 0.1 } },
     ]);
-    expect(r).toEqual({ agente: "coder", pct: 80, modelo: "sonnet" });
+    expect(r).toEqual({ agente: "coder", pct: 80 });
   });
   it("undefined when nothing was spent", () => expect(ondeMaisGastou([m("a", "concluida")])).toBeUndefined());
 });
@@ -95,5 +95,20 @@ describe("cronicaDe", () => {
       "A execução terminou",
     ]);
     expect(lines[3]?.tone).toBe("erro");
+  });
+});
+
+describe("background commands are not agents", () => {
+  it("drops untyped tasks and restarts the chain count on OK", () => {
+    const comandos = new Set<string>();
+    const evs: Ev[] = [
+      { kind: "subagent-started", agentId: "bash1" },
+      { kind: "subagent-started", agentId: "c1", subagentType: "coder" },
+      { kind: "subagent-finished", agentId: "bash1", status: "failed" },
+    ];
+    expect(evs.filter((e) => !ehComando(e, comandos))).toEqual([evs[1]]);
+    const ok: Ev = { kind: "text", agent: "main", text: "OK 446" };
+    expect(contarTrocas([evs[1]!, ok])).toBe(0);
+    expect(contarTrocas([ok, evs[1]!, ok])).toBe(1);
   });
 });

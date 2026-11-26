@@ -5,7 +5,7 @@ import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import type { Readable } from "node:stream";
 import { createInterface } from "node:readline";
 import { check, recordHandoff, recordLoop, type BreakerLimits, type BreakerState } from "@lab/core/src/breaker.ts";
-import { addUsage, excedeu, newBudget, recordResult } from "@lab/core/src/budget.ts";
+import { addUsage, newBudget, recordResult } from "@lab/core/src/budget.ts";
 import { GATE_FILE, isApproved } from "@lab/core/src/gate.ts";
 import { consumo, deveParar, type Ponto } from "@lab/core/src/plan-budget.ts";
 import { snapshotDeLimite } from "@lab/core/src/usage.ts";
@@ -25,7 +25,6 @@ export interface RunOpts {
   projectDir: string; // target project (cwd of claude); nothing in it is executed by us
   missionsDir: string; // holds `<id>/` with mission.json, `approved` seal and `out/` staging
   prompt: string;
-  tetoUsd: number; // mission spend cap (server-side); the CLI flag is only a safety net
   agent?: string;
   testCommands?: string[]; // phase 2: project test commands allowed in Bash, e.g. "npm test"
   hubDir?: string; // phase 2: also allows exactly the hub local-model helper (spec 036)
@@ -94,15 +93,17 @@ function rtkForm(c: string): string | undefined {
   return /^rtk [\w@./: =-]+$/.test(out) && out !== c ? out : undefined;
 }
 
+/** Hub wrapper for contained `go test`, only for Go projects. */
+export const goTestScript = (hubDir: string | undefined, project: string) =>
+  hubDir && existsSync(join(project, "go.mod")) ? join(hubDir, "scripts", "go-test.sh") : undefined;
+
 /** Pure: builds the argv for `claude -p`. Always an explicit --permission-mode; never bypassPermissions. */
 export function buildArgs(o: RunOpts, sessionId: string): string[] {
   const project = absPath(o.projectDir, "projectDir");
   if (o.mission.kind === "redacao") return buildArgsRedacao(o, sessionId, project);
   const { staging, resumoDir } = missionPaths(o);
-  const budget = Math.max(o.tetoUsd - o.mission.costUsd, 0.0001).toFixed(4);
   const args = ["-p", o.prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", "dontAsk"];
   if (o.agent) args.push("--agent", o.agent);
-  args.push("--max-budget-usd", budget);
   args.push("--disable-slash-commands", "--settings", NO_PONYTAIL); // missions never use skills; their listing is paid on every call
   if (!/app\.clickup\.com/.test(o.mission["demanda"] as string ?? "")) args.push("--strict-mcp-config"); // no MCP servers (their tool lists are paid on every call); only the ClickUp intake needs one
   const claudeDir = join(project, ".claude");
@@ -127,7 +128,9 @@ export function buildArgs(o: RunOpts, sessionId: string): string[] {
     });
     const script = o.hubDir ? join(absPath(o.hubDir, "hubDir"), "scripts", "local.ts") : undefined;
     const local = script ? ["run", "compact-test-log", "list-relevant-files"].map((t) => `Bash(node ${script} ${t}:*)`) : [];
-    const git = ["status", "diff", "log"].map((c) => `Bash(git ${c}:*)`); // read-only: lets a resumed run audit what was already done
+    const go = goTestScript(o.hubDir, project);
+    if (go) local.push(`Bash(${go}:*)`);
+    const git = ["status", "diff", "log"].flatMap((c) => [`git ${c}`, rtkForm(`git ${c}`)]).filter(Boolean).map((c) => `Bash(${c}:*)`); // read-only: lets a resumed run audit what was already done
     args.push("--add-dir", resumoDir); // the only place outside the project phase 2 may write: the wrap-up card
     args.push("--allowedTools", "Read", "Glob", "Grep", rulePath(project), rulePath(resumoDir), ...tests, ...local, ...git);
     args.push("--disallowedTools", ...["git commit", "git push", "gh", "curl", "wget", "ssh", "scp"].map((c) => `Bash(${c}:*)`), "WebFetch", ...deny);
@@ -139,10 +142,8 @@ export function buildArgs(o: RunOpts, sessionId: string): string[] {
 function buildArgsRedacao(o: RunOpts, sessionId: string, dir: string): string[] {
   if (!o.redacao) throw new Error("redacao run needs opts.redacao");
   if (!ID.test(o.mission.id)) throw new Error(`invalid mission id: ${o.mission.id}`);
-  const budget = Math.max(o.tetoUsd - o.mission.costUsd, 0.0001).toFixed(4);
   const args = ["-p", o.prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", "dontAsk"];
   if (o.agent) args.push("--agent", o.agent);
-  args.push("--max-budget-usd", budget);
   args.push("--disable-slash-commands", "--settings", NO_PONYTAIL);
   args.push("--strict-mcp-config"); // articles use WebSearch/WebFetch, never MCP
   const refs = o.redacao.leitura.map((p) => absPath(p, "reference"));
@@ -170,6 +171,7 @@ function pauseReason(stopped: string, pt: string): string | undefined {
   if (stopped.startsWith("pause: ")) return "pausada pelo usuário";
   if (stopped.startsWith("breaker: ")) return `disjuntor: ${pt}`;
   if (stopped.startsWith("budget: ")) return `teto de uso: ${pt}`;
+  if (stopped.startsWith("build: ")) return `build necessário: ${pt}`;
   if (stopped.startsWith("plan: ")) return `teto de uso do plano: ${pt}`;
   return undefined;
 }
@@ -194,7 +196,6 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
   const sessionId = o.phase === 1 ? (m.sessionId ?? randomUUID()) : o.semResume ? randomUUID() : (m.sessionId ?? "");
   if (fresca) m = { ...m, sessionId };
   const priorCost = m.costUsd;
-  const remaining = o.tetoUsd - priorCost;
   let bs: BreakerState = { loops: m.loops, handoffs: m.handoffs }; // seeded from mission.json; loops come from there plus `VOLTA <spec>` lines the orchestrator emits (main agent text)
 
   const out: RunOutcome = { mission: m, unknownLines: 0, tokensByAgent: {}, subagentTypes: {}, costByModel: {}, denials: [], negados: [] };
@@ -237,10 +238,12 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
   // ponytail: stats are hub-wide, so a concurrent mission's calls would leak in; add a mission id to the stat line if runs ever overlap.
   const statsAntes = o.hubDir ? readStats(o.hubDir) : undefined;
   let chamadasLocal = 0;
-  if (remaining <= 0) return finish("budget: mission cap already reached", "o teto de gasto da missão já foi atingido");
 
   const args = buildArgs({ ...o, mission: m }, sessionId);
-  const child = (deps.spawn ?? defaultSpawn)(o.claudeBin ?? "claude", args, { cwd: absPath(o.projectDir, "projectDir"), ...(o.phase === 2 && o.testCommands?.length ? { env: { ...process.env, LAB_LOCAL_COMMANDS: JSON.stringify(o.testCommands) } } : {}) });
+  // a cold Go build here takes ~10 min, far over the default Bash timeout
+  const goEnv = o.phase === 2 && goTestScript(o.hubDir, o.projectDir) ? { BASH_DEFAULT_TIMEOUT_MS: "1200000", BASH_MAX_TIMEOUT_MS: "1200000" } : undefined;
+  const comandosEnv = o.phase === 2 && o.testCommands?.length ? { LAB_LOCAL_COMMANDS: JSON.stringify(o.testCommands) } : undefined;
+  const child = (deps.spawn ?? defaultSpawn)(o.claudeBin ?? "claude", args, { cwd: absPath(o.projectDir, "projectDir"), ...(goEnv || comandosEnv ? { env: { ...process.env, ...comandosEnv, ...goEnv } } : {}) });
   child.stderr.resume();
 
   let stopped: string | undefined;
@@ -259,6 +262,7 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
   const tokensByMsg = new Map<string, { agent: string; total: number }>(); // assistant blocks repeat the same message id
   let anon = 0;
   const ultimoBash = new Map<string, string>();
+  const specsOk = new Set<string>();
   const tripBreaker = () => {
     const injected = o.breaker?.get();
     const s = injected ? { ...injected, handoffs: bs.handoffs } : bs;
@@ -277,7 +281,7 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
     else if (e.kind === "subagent-started") {
       fezTrabalho = true;
       if (e.subagentType) out.subagentTypes[e.agentId] = e.subagentType;
-      bs = recordHandoff(bs, o.now);
+      if (e.subagentType) bs = recordHandoff(bs, o.now); // long Bash commands also start "tasks": only agents are handoffs
     } else if (e.kind === "denied") { // the denial event carries no input: pair it with that agent's last Bash command
       if (out.negados.length < 10) out.negados.push({ agent: e.agent, tool: e.tool, command: ultimoBash.get(e.agent) ?? "" });
     } else if (e.kind === "tool") {
@@ -286,6 +290,11 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
       if (e.command && usaLocal(e.command)) chamadasLocal++;
     } else if (e.kind === "text") {
       if (e.agent === MAIN_AGENT) for (const x of e.text.matchAll(/^VOLTA\s+([\w.-]+)\s*$/gm)) bs = recordLoop(bs, x[1]!, o.now);
+      // builds are the user's job: the mission waits until they run it and press continue
+      const build = e.agent === MAIN_AGENT ? /^BUILD\s+(.{1,300})$/m.exec(e.text)?.[1]?.trim() : undefined;
+      if (build) stop(`build: ${build}`, `rode no projeto e clique em Retomar: ${build}`);
+      // a spec that passed the tester makes the chain limit start over (once per spec; the rework limit still applies)
+      if (e.agent === MAIN_AGENT) for (const x of e.text.matchAll(/^OK\s+([\w.-]+)\s*$/gm)) if (!specsOk.has(x[1]!)) { specsOk.add(x[1]!); bs = { ...bs, handoffs: 0 }; }
     } else if (e.kind === "usage") {
       const t = e.tokens;
       tokensByMsg.set(e.messageId || `anon-${anon++}`, { agent: e.agent, total: t.input + t.output + t.cacheRead + t.cacheCreation });
@@ -319,8 +328,6 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
         for (const [model, usd] of Object.entries(e.modelUsage)) per = addUsage(per, { agent: model, costUsd: usd });
         out.costByModel = per.byAgent;
       }
-      if (budget.exhausted) stop("budget: CLI reported the spend cap was hit", "a CLI informou que o teto de gasto foi atingido");
-      else if (excedeu(budget, remaining)) stop(`budget: spent ${budget.totalUsd.toFixed(4)} of ${remaining.toFixed(4)} USD`, `gastou ${budget.totalUsd.toFixed(4)} de ${remaining.toFixed(4)} USD`);
     }
     tripBreaker();
   };

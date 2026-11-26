@@ -15,4 +15,7 @@ export function linhasAgente(ms: readonly M[]): { agente: string; tokens: number
   return rows.map(([agente, tokens]) => ({ agente, tokens, pct: total > 0 ? Math.round((tokens / total) * 100) : 0 }));
 }
 
-export const linhasModelo = (ms: readonly M[]): { modelo: string; usd: number }[] => somar(ms, "costByModel").map(([modelo, usd]) => ({ modelo, usd }));
+
+/** Share of the plan windows a mission used, as shown next to the 5 h and weekly gauges. */
+export const textoPlano = (m: Pick<M, "planoGasto">): string =>
+  m.planoGasto ? `5 h: ${Math.round(m.planoGasto.cincoHoras)}% · semana: ${Math.round(m.planoGasto.semana)}%` : "—";

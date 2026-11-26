@@ -159,7 +159,7 @@ export function createNotificador(o: NotificadorOpts) {
     else if (m.stage === "concluida") emitir({ categoria: "missao", nivel: "sucesso", titulo: "Missão concluída", texto: d, link, origem });
     else if (m.stage === "pausada") {
       const disj = r.startsWith("disjuntor");
-      emitir({ categoria: "missao", nivel: disj ? "erro" : "aviso", titulo: disj ? "Disjuntor acionado" : "Missão pausada", texto: `${d}. ${r || "aguarda você"}`, link, origem });
+      emitir({ categoria: "missao", nivel: disj ? "erro" : "aviso", titulo: disj ? "Disjuntor acionado" : r.startsWith("build necessário") ? "Build necessário: é com você" : "Missão pausada", texto: `${d}. ${r || "aguarda você"}`, link, origem });
     } else if (m.stage === "parada") {
       const why = limpar(m["stopReason"] ?? "", 140);
       const user = why === "stopped by user";

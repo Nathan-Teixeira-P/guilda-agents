@@ -6,15 +6,18 @@ import { createServer as createHttp, type IncomingMessage, type ServerResponse }
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { z } from "zod";
 import { GATE_FILE, isApproved } from "@lab/core/src/gate.ts";
+import { conferirSpecs } from "@lab/core/src/specs.ts";
+import { somarGasto, type Gasto } from "@lab/core/src/plan-budget.ts";
 import { MAX_FILE_BYTES } from "@lab/core/src/promote.ts";
 import { newMission, transition, type Mission } from "@lab/core/src/mission.ts";
 import { normalizar, PROJECT_ID, analisarProjeto, analisarSubida, resolverProjeto, validarClickupUrl, validarComando, validarOrigem, type LeitorProjeto, type Projeto } from "@lab/core/src/projects.ts";
 import { checkPasta, cloneRepo, type CloneResult } from "./clone.ts";
+import { gravarEvento, lerEventos } from "./event-log.ts";
 import { promoteDraft } from "./promote.ts";
-import { promptFase1, promptFase2, promptContinuacao, instrucaoRelatorio, instrucaoResumo } from "./prompt.ts";
+import { promptFase1, promptFase2, promptContinuacao, instrucaoRelatorio, instrucaoResumo, instrucaoExecucao } from "./prompt.ts";
 import { promptFase1Redacao, promptFase2Redacao, promptSugestoes } from "./prompt-redacao.ts";
 import { createProjectsStore, lerRetomada, type ProjectsStore } from "./projects-store.ts";
-import type { RunOpts, RunOutcome } from "./runner.ts";
+import { goTestScript, type RunOpts, type RunOutcome } from "./runner.ts";
 import { MISSION_ID, type Store } from "./store.ts";
 import type { StreamEvent } from "./stream.ts";
 import { createUsageSource, type UsageSource } from "./usage-source.ts";
@@ -54,7 +57,6 @@ export interface ServerOpts {
 }
 
 const MAX_BODY = 64 * 1024;
-const DEFAULT_TETO_USD = 5;
 /** Names the rejected command and, for path arguments, which one (the UI shows this text). */
 const motivoComando = (c: string) => { const t = c.split(" ").find((x) => x.startsWith("/") || x.startsWith("~")); return t ? `argumento "${t}" é caminho absoluto (/ ou ~); use caminho relativo ao projeto` : "comando fora do formato permitido"; };
 const Comandos = z.array(z.string()).max(50).superRefine((l, ctx) => { for (const c of l as string[]) if (!validarComando(c)) ctx.addIssue({ code: "custom", message: `comando "${String(c).slice(0, 80)}" recusado: ${motivoComando(c)}` }); }).transform((l) => [...new Set(l)]);
@@ -67,7 +69,7 @@ const NewProject = z.object({
   apelidos: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
   clickupListUrl: z.string().max(2048).refine(validarClickupUrl, "must be an https://app.clickup.com url").optional(),
 });
-const NewMission = z.object({ project: z.string().min(1).max(100), demanda: z.string().min(1).max(20_000), tetoUsd: z.number().positive().max(1000).optional(), tetoPp: z.number().positive().max(100).optional(), tetoSemanaPp: z.number().positive().max(100).optional(), confirmarUso: z.boolean().optional(), relatorio: z.boolean().optional() });
+const NewMission = z.object({ project: z.string().min(1).max(100), demanda: z.string().min(1).max(20_000), tetoPp: z.number().positive().max(100).optional(), tetoSemanaPp: z.number().positive().max(100).optional(), confirmarUso: z.boolean().optional(), relatorio: z.boolean().optional() });
 const Resumo = z.object({ feito: z.array(z.string().max(1000)).max(50), pendente: z.array(z.string().max(1000)).max(50), acaoUsuario: z.array(z.string().max(1000)).max(50) });
 const Ponto = z.object({ percentual: z.number(), reiniciaEm: z.number() });
 const UsoInicial = z.object({ cincoHoras: Ponto, semana: Ponto });
@@ -92,7 +94,7 @@ const SugerirAgenda = z.object({ nichos: z.array(z.object({ key: z.string().min(
 const PutNichos = z.object({ nichos: z.array(z.unknown()).max(200), hash: z.string().min(1).max(100), mtimeMs: z.number() });
 const SYNC_AVISO = "Register the project 'afiliados' (id or name) in the hub to use this panel.";
 const Ajustes = z.object({ comentario: z.string().trim().min(1).max(20_000) });
-const Limites = z.object({ tetoUsd: z.number().positive().max(1000).optional(), tetoPp: z.number().positive().max(100).optional(), tetoSemanaPp: z.number().positive().max(100).optional(), confirmarUso: z.boolean().optional() });
+const Limites = z.object({ tetoPp: z.number().positive().max(100).optional(), tetoSemanaPp: z.number().positive().max(100).optional(), confirmarUso: z.boolean().optional() });
 const Escolher = z.object({ indice: z.number().int().min(0) });
 const ESTADOS = ["pesquisando", "rascunho", "em-revisao", "edicao-final", "aprovado", "cancelado", "pausado"];
 const TIPOS: Record<string, string> = { ".md": "text/markdown; charset=utf-8", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png" };
@@ -175,7 +177,7 @@ export function createServer(o: ServerOpts) {
     publish("mission", summary(m));
     nt?.missao(m);
   };
-  const summary = (m: Mission) => ({ id: m.id, project: m.project, stage: m.stage, costUsd: m.costUsd, updatedAt: m.updatedAt, stopReason: m["stopReason"], pauseReason: m.pauseReason });
+  const summary = (m: Mission) => ({ id: m.id, project: m.project, stage: m.stage, costUsd: m.costUsd, planoGasto: m["planoGasto"], updatedAt: m.updatedAt, stopReason: m["stopReason"], pauseReason: m.pauseReason });
   const projectPath = (m: Mission) => registry.get(m.project)?.caminho;
   const newProjectId = (nome: string) => {
     const base = normalizar(nome).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "") || "projeto";
@@ -219,27 +221,30 @@ export function createServer(o: ServerOpts) {
       if (cur && cur.stage !== "parada" && cur.stage !== "concluida") save({ ...transition(cur, "parada", { now: clock }), stopReason: why });
     };
     if (!proj) { park(m.id, "unknown project"); return; }
-    const teto = typeof m["tetoUsd"] === "number" ? m["tetoUsd"] : DEFAULT_TETO_USD;
     const comandos = registry.get(m.project)?.comandos ?? [];
     const plano = planoDe(m); // no caps: no limit; no baseline: first reading becomes the baseline
     if (phase === 2 && comandos.length === 0) publish("warning", { missionId: m.id, message: "sem comandos de teste configurados: a fase 2 roda sem Bash" });
     if (phase === 2) rmSync(resumoPath(m), { force: true }); // a stale wrap-up must never pass for this run
     const stopWatch = watchDirs({ mission: store.dirOf(m.id), project: join(proj, ".claude") }, (e) => publish("file", { missionId: m.id, ...e }));
+    const usoAntes = usage.atual();
     const done = (async () => {
       try {
         const out = await o.runner({
-          phase, mission: m, projectDir: proj, missionsDir: store.dir, prompt: phase === 2 ? `${prompt}\n${m.kind === "relatorio" ? `${instrucaoRelatorio}\n` : ""}${instrucaoResumo(resumoPath(m))}` : prompt, tetoUsd: teto, now: clock, signal: ac.signal, ...(plano ? { plano } : {}),
+          phase, mission: m, projectDir: proj, missionsDir: store.dir, prompt: phase === 2 ? `${prompt}\n${m.kind === "relatorio" ? `${instrucaoRelatorio}\n` : `${instrucaoExecucao(comandos, goTestScript(o.hubDir, proj))}\n`}${instrucaoResumo(resumoPath(m))}` : prompt, now: clock, signal: ac.signal, ...(plano ? { plano } : {}),
           ...(o.agent ? { agent: o.agent } : {}), ...(phase === 2 ? { ...(specsOf(m).length === 0 && !continuacao ? { semResume: true } : {}), testCommands: comandos, ...(o.hubDir ? { hubDir: o.hubDir } : {}) } : {}),
           onEvent: (e: StreamEvent) => {
             if (e.kind === "rate-limit") usage.alimentar(e);
             publish("progress", { missionId: m.id, event: e });
+            gravarEvento(store.dirOf(m.id), e);
             nt?.progresso(m.id, e, "missao");
           },
         });
         let cur: Mission = out.mission;
+        const usoDepois = usage.atual();
+        if (usoAntes.estado === "ok" && usoDepois.estado === "ok") cur = { ...cur, planoGasto: somarGasto(cur["planoGasto"] as Gasto | undefined, usoAntes, usoDepois) };
         if (phase === 1 && cur.stage === "aguardando-aprovacao") {
           const r = promoteDraft(join(store.dirOf(m.id), "out"), proj);
-          cur = r.ok ? { ...cur, promoted: r.promoted } : { ...transition(cur, "parada", { now: clock }), stopReason: `promotion failed: ${r.reason}` };
+          cur = r.ok ? { ...cur, promoted: r.promoted, avisosSpecs: conferirSpecs(r.promoted.filter((p) => p.startsWith("specs/")).map((p) => ({ name: p.slice(6), text: readFileSync(join(store.dirOf(m.id), "out", p), "utf8") }))) } : { ...transition(cur, "parada", { now: clock }), stopReason: `promotion failed: ${r.reason}` };
         } else if (phase === 2 && cur.stage === "concluida") {
           const r = lerResumo(resumoPath(m));
           if (r) cur = { ...cur, resumo: r };
@@ -351,7 +356,7 @@ export function createServer(o: ServerOpts) {
     const done = (async () => {
       try {
         const out = await o.runner({
-          phase, mission: m, projectDir: dir, missionsDir: rs.dir, tetoUsd: typeof m["tetoUsd"] === "number" ? m["tetoUsd"] : DEFAULT_TETO_USD, now: clock, signal: ac.signal,
+          phase, mission: m, projectDir: dir, missionsDir: rs.dir, now: clock, signal: ac.signal,
           prompt: sugerir ? promptSugestoes(input) : phase === 1 ? promptFase1Redacao(input) : promptFase2Redacao(input), redacao: { hubDir: hub, leitura, ...(sugerir ? { sugerir } : {}) },
           ...(plano ? { plano } : {}), ...(o.agent ? { agent: o.agent } : {}),
           onEvent: (e: StreamEvent) => { if (e.kind === "rate-limit") usage.alimentar(e); publish("progress", { missionId: m.id, event: e }); nt?.progresso(m.id, e, "redacao"); },
@@ -415,11 +420,11 @@ export function createServer(o: ServerOpts) {
       const uso = usage.atual();
       const livre = podeIniciar(uso);
       const { tetoPp, tetoSemanaPp } = lim.data;
-      if (url.searchParams.get("estimar") === "1") return send(res, 200, { estimativa: { uso: usageView(), livre, tetoPp: tetoPp ?? null, tetoSemanaPp: tetoSemanaPp ?? null, tetoUsd: lim.data.tetoUsd ?? DEFAULT_TETO_USD, palavras: b.palavras } }); // nothing is created or started
+      if (url.searchParams.get("estimar") === "1") return send(res, 200, { estimativa: { uso: usageView(), livre, tetoPp: tetoPp ?? null, tetoSemanaPp: tetoSemanaPp ?? null, palavras: b.palavras } }); // nothing is created or started
       if (!livre.ok && lim.data.confirmarUso !== true) throw Object.assign(new HttpError(409, livre.motivo), { extra: { motivo: livre.motivo, uso: usageView() } });
       const usoInicial = uso.estado === "ok" ? { cincoHoras: { percentual: uso.cincoHoras.percentual, reiniciaEm: uso.cincoHoras.reiniciaEm }, semana: { percentual: uso.semana.percentual, reiniciaEm: uso.semana.reiniciaEm } } : undefined;
       const criada = rs.criar(b, clock);
-      const m = transition({ ...criada, tetoUsd: lim.data.tetoUsd ?? DEFAULT_TETO_USD, ...(tetoPp !== undefined ? { tetoPp } : {}), ...(tetoSemanaPp !== undefined ? { tetoSemanaPp } : {}), ...(usoInicial ? { usoInicial } : {}) }, "planejando", { now: clock });
+      const m = transition({ ...criada, ...(tetoPp !== undefined ? { tetoPp } : {}), ...(tetoSemanaPp !== undefined ? { tetoSemanaPp } : {}), ...(usoInicial ? { usoInicial } : {}) }, "planejando", { now: clock });
       rs.salvar(m);
       artigoEvent(m);
       launchRedacao(m, 1);
@@ -744,12 +749,14 @@ export function createServer(o: ServerOpts) {
       if (!livre.ok && b.confirmarUso !== true) throw Object.assign(new HttpError(409, livre.motivo), { extra: { motivo: livre.motivo, uso: usageView() } });
       const usoInicial = uso.estado === "ok" ? { cincoHoras: { percentual: uso.cincoHoras.percentual, reiniciaEm: uso.cincoHoras.reiniciaEm }, semana: { percentual: uso.semana.percentual, reiniciaEm: uso.semana.reiniciaEm } } : undefined;
       const id = `m-${randomBytes(6).toString("hex")}`;
-      const m: Mission = { ...newMission(id, projectId!, clock), ...(b.relatorio ? { kind: "relatorio" as const } : {}), demanda: b.demanda, tetoUsd: b.tetoUsd ?? DEFAULT_TETO_USD, ...(b.tetoPp !== undefined ? { tetoPp: b.tetoPp } : {}), ...(b.tetoSemanaPp !== undefined ? { tetoSemanaPp: b.tetoSemanaPp } : {}), ...(usoInicial ? { usoInicial } : {}) };
+      const m: Mission = { ...newMission(id, projectId!, clock), ...(b.relatorio ? { kind: "relatorio" as const } : {}), demanda: b.demanda, ...(b.tetoPp !== undefined ? { tetoPp: b.tetoPp } : {}), ...(b.tetoSemanaPp !== undefined ? { tetoSemanaPp: b.tetoSemanaPp } : {}), ...(usoInicial ? { usoInicial } : {}) };
       const planning = transition(m, "planejando", { now: clock }); // persisted now: the runner only writes at the end
       save(planning);
       launch(planning, 1, prompt1(planning));
       return send(res, 201, { id, mission: planning });
     }
+    const historico = /^\/missions\/([^/]+)\/eventos$/.exec(path);
+    if (historico && method === "GET") return send(res, 200, { eventos: lerEventos(store.dirOf(mustGet(historico[1]!).id)) });
     const hit = /^\/missions\/([^/]+)(?:\/(approve|adjust|resume|continue|stop|pause))?$/.exec(path);
     if (!hit) throw new HttpError(404, "not found");
     const [, id = "", action] = hit;
@@ -811,7 +818,9 @@ export function createServer(o: ServerOpts) {
         if (!isApproved(store.dirOf(id))) throw new HttpError(409, "approval gate not open: cannot resume execution");
         const next = intervene(transition(limpa as Mission, "executando", { now: clock, approved: true }));
         save(next);
-        launch(next, 2, promptFase2({ specs: specsOf(m), projetoPath: projectPath(m) ?? "", retomada: true, ...(o.hubDir ? { hubDir: o.hubDir } : {}), ...(b.comment ? { comentario: b.comment } : {}) }));
+        const construiu = String(m["pauseReason"] ?? "").startsWith("build necessário") ? "The user ran the requested build and pressed continue: verify what was waiting for it, then go on. Do not ask for the same build again." : "";
+        const comentario = [construiu, b.comment].filter(Boolean).join("\n");
+        launch(next, 2, promptFase2({ specs: specsOf(m), projetoPath: projectPath(m) ?? "", retomada: true, ...(o.hubDir ? { hubDir: o.hubDir } : {}), ...(comentario ? { comentario } : {}) }));
         return send(res, 202, { mission: next });
       }
       // phase 1 resumes like adjust: fresh session carrying the comment, auditing what was already drafted

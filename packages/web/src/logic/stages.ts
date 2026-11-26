@@ -8,6 +8,7 @@ export interface M {
   project: string;
   stage: Stage;
   costUsd: number;
+  planoGasto?: { cincoHoras: number; semana: number };
   createdAt: string;
   updatedAt: string;
   demanda?: string;
@@ -15,8 +16,10 @@ export interface M {
   pausedFrom?: "planejando" | "executando";
   stopReason?: string;
   tokensByAgent?: Record<string, number>;
+  subagentTypes?: Record<string, string>;
   costByModel?: Record<string, number>;
   promoted?: string[];
+  avisosSpecs?: string[];
   loops?: Record<string, number>;
   local?: { localTasks: number; fallbacks: number; tokensSaved: number };
 }

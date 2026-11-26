@@ -33,6 +33,3 @@ export function recordResult(s: BudgetState, r: ResultEvent): BudgetState {
     exhausted: s.exhausted || r.subtype === "error_max_budget_usd" || r.terminal_reason === "budget_exhausted",
   };
 }
-
-/** Reaching the cap counts as exceeded (the CLI stops at "reached"). */
-export const excedeu = (s: BudgetState, tetoUsd: number): boolean => s.exhausted || s.totalUsd >= tetoUsd;

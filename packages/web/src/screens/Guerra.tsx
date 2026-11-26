@@ -4,7 +4,7 @@ import { api } from "../api.ts";
 import { gateState } from "../logic/events.ts";
 import { erroDeAcao } from "../logic/erros.ts";
 import { agruparPacote, type Arquivo } from "../logic/pacote.ts";
-import { linhasAgente } from "../logic/arsenal.ts";
+import { linhasAgente, textoPlano } from "../logic/arsenal.ts";
 import type { M } from "../logic/stages.ts";
 import { useMedia, type Live } from "../store.ts";
 import { Membro } from "../ui/Avatar.tsx";
@@ -105,8 +105,8 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
       <h2>Veredito</h2>
       <dl className="dados">
         <dt>Portão</dt><dd className={gateState(m) === "selado" ? "ok" : "warn"}>{GATE_TXT[gateState(m)]}</dd>
-        <dt>Custo de tabela (informativo)</dt><dd>US$ {m.costUsd.toFixed(2)}</dd>
         {m.local && <><dt>Modelo local</dt><dd>{m.local.localTasks} tarefa(s) · {m.local.fallbacks} recuo(s) para o Claude · ≈ {m.local.tokensSaved} tokens economizados (estimativa)</dd></>}
+        <dt>Uso do plano</dt><dd>{textoPlano(m)} <span className="muted small">atualiza ao fim de cada execução</span></dd>
         <dt>Pacote</dt><dd>{todos.length} arquivo{todos.length === 1 ? "" : "s"} · {grupos.find((g) => g.grupo === "specs")?.arquivos.filter((a) => /\.spec\.md$/.test(a.path)).length ?? 0} spec(s)</dd>
       </dl>
       {agentes.length > 0 && (
@@ -120,6 +120,12 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
           <summary>Arquivos promovidos ({m.promoted!.length})</summary>
           <ul className="lista-simples">{m.promoted!.map((p) => <li key={p} className="mono">{p}</li>)}</ul>
         </details>
+      )}
+      {aguardando && (m.avisosSpecs?.length ?? 0) > 0 && (
+        <div className="warn">
+          <strong>Conferência das specs: {m.avisosSpecs!.length} problema(s)</strong>
+          <ul className="lista-simples">{m.avisosSpecs!.map((a) => <li key={a} className="mono">{a}</li>)}</ul>
+        </div>
       )}
       {recusado && <div className="selo-recusado"><Seal rachado tamanho={64} /></div>}
       {erro && <p className="err" role="alert">{erro}</p>}

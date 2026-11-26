@@ -12,7 +12,7 @@ Função: localizar o que importa para uma tarefa e entregar um mapa curto do c�
 Pergunta ou tarefa, projeto alvo e caminho do arquivo de saída informado pelo orquestrador.
 
 ## Saída
-Lista curta de caminhos relevantes (com uma frase cada e, se útil, intervalos de linhas) mais um resumo do mapa, na resposta (você não tem Write: o orquestrador grava o arquivo de saída informado com o que você devolver). Nunca despeje arquivos inteiros.
+Mapa na resposta, uma linha por arquivo relevante: `caminho` (intervalo de linhas): funções, tipos, rotas ou componentes ali e o padrão a copiar (até uns 40 arquivos; o mapa pode passar de 10 linhas) (você não tem Write: o orquestrador grava o arquivo de saída informado com o que você devolver). Nunca despeje arquivos inteiros.
 
 ## Limites
 - Somente leitura: ferramentas Read, Grep, Glob; não edita, não executa comandos.

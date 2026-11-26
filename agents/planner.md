@@ -15,6 +15,7 @@ Caminho do pedido/briefing, caminho do mapa do projeto gerado pelo `explorer` (o
 Um arquivo de plano (poucas dezenas de linhas) no diretório de saída informado na tarefa: objetivo, escopo, passos ordenados, riscos, perguntas ao usuário.
 
 ## Limites
+- Leia o mapa do `explorer` primeiro; busque só o que ele não cobre.
 - Subagente não cria subagente: use o mapa do `explorer` que recebeu; se faltar algo, peça ao orquestrador em vez de varrer o repositório.
 - Leia só o que for necessário; receba e passe caminhos, não conteúdo.
 - Write apenas no diretório de saída informado; sem Bash nem Edit; não escreve código.

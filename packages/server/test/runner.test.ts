@@ -19,7 +19,7 @@ const agent =
     calls.push({ file, args });
     return realSpawn(process.execPath, [fake, fixture(n), mode], { cwd: o.cwd, stdio: ["ignore", "pipe", "pipe"] });
   };
-const base = () => ({ projectDir: project, missionsDir, prompt: "go", tetoUsd: 5, now });
+const base = () => ({ projectDir: project, missionsDir, prompt: "go", now });
 const m0 = (stage: "planejando" | "aguardando-aprovacao"): Mission => {
   let m = transition(newMission("m1", project, now), "planejando", { now });
   if (stage === "aguardando-aprovacao") m = transition(m, "aguardando-aprovacao", { now });
@@ -50,7 +50,7 @@ describe("buildArgs", () => {
     const denied = args.slice(args.indexOf("--disallowedTools") + 1);
     expect(denied).toContain("Bash");
     expect(denied).toContain(`Edit(/${join(project, ".claude")}/**)`);
-    expect(args).toContain("--max-budget-usd");
+    expect(args).not.toContain("--max-budget-usd");
   });
   it("phase 1: ClickUp read tools are allowed only when the demand has a ClickUp link", () => {
     const com = buildArgs({ ...a(), phase: 1, mission: { ...m0("planejando"), demanda: "ver https://app.clickup.com/t/1/abc" } }, "s");
@@ -71,15 +71,15 @@ describe("buildArgs", () => {
     const mk = (testCommands?: string[]) => buildArgs({ ...a(), phase: 2, mission: { ...m0("aguardando-aprovacao"), sessionId: "sid-1" }, ...(testCommands ? { testCommands } : {}) }, "x");
     expect(() => mk(["npm test; rm -rf /"])).toThrow();
     expect(() => mk(["ls"])).toThrow();
-    for (const args of [mk(), mk([])]) expect(args.slice(0, args.indexOf("--disallowedTools")).some((x) => x.startsWith("Bash(") && !x.startsWith("Bash(git "))).toBe(false);
+    for (const args of [mk(), mk([])]) expect(args.slice(0, args.indexOf("--disallowedTools")).some((x) => x.startsWith("Bash(") && !/^Bash\((rtk )?git /.test(x))).toBe(false);
   });
   it("phase 2: hub local helper allowed for exactly three subcommands, only with a hub", () => {
     const mk = (hubDir?: string) => buildArgs({ ...a(), phase: 2, mission: { ...m0("aguardando-aprovacao"), sessionId: "sid-1" }, ...(hubDir ? { hubDir } : {}) }, "x");
     const allowed = (l: string[]) => l.slice(l.indexOf("--allowedTools"), l.indexOf("--disallowedTools"));
-    const rules = allowed(mk("/hub")).filter((x) => x.startsWith("Bash(") && !x.startsWith("Bash(git "));
+    const rules = allowed(mk("/hub")).filter((x) => x.startsWith("Bash(") && !/^Bash\((rtk )?git /.test(x));
     expect(allowed(mk())).toEqual(expect.arrayContaining(["Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)"]));
     expect(rules).toEqual(["Bash(node /hub/scripts/local.ts run:*)", "Bash(node /hub/scripts/local.ts compact-test-log:*)", "Bash(node /hub/scripts/local.ts list-relevant-files:*)"]);
-    expect(allowed(mk()).some((x) => x.startsWith("Bash(") && !x.startsWith("Bash(git "))).toBe(false);
+    expect(allowed(mk()).some((x) => x.startsWith("Bash(") && !/^Bash\((rtk )?git /.test(x))).toBe(false);
     expect(() => mk("/hub/*")).toThrow();
     expect(() => mk("rel")).toThrow();
   });
@@ -158,20 +158,6 @@ describe("runPhase", () => {
     expect(out.mission.pauseReason).toMatch(/sem executar nada/);
   });
 
-  it("budget signal kills the process and pauses the mission", async () => {
-    const out = await runPhase({ ...base(), phase: 1, mission: m0("planejando") }, { spawn: agent("stream-budget-exceeded", "hang") });
-    expect(out.stopped).toMatch(/budget/);
-    expect(out.mission.stage).toBe("pausada");
-    expect(out.mission["pauseReason"]).toMatch(/^teto de uso: a CLI informou/);
-  });
-
-  it("server-side spend cap kills even without the CLI signal, and pauses", async () => {
-    const out = await runPhase({ ...base(), tetoUsd: 0.001, phase: 1, mission: m0("planejando") }, { spawn: agent("stream-basic", "hang") });
-    expect(out.stopped).toMatch(/budget/);
-    expect(out.mission.stage).toBe("pausada");
-    expect(out.mission["pauseReason"]).toMatch(/^teto de uso: gastou /);
-  });
-
   it("breaker trip kills the process and pauses the mission", async () => {
     let b = newBreaker();
     for (let i = 0; i < 3; i++) b = recordLoop(b, "spec-1", now);
@@ -197,6 +183,23 @@ describe("runPhase", () => {
     expect(out.mission.stage).toBe("pausada");
     expect(out.mission["pauseReason"]).toMatch(/^disjuntor: 9 trocas encadeadas sem intervenção do usuário \(limite 8\)/);
     expect(out.mission.handoffs).toBe(9);
+  });
+
+  it("an `OK <spec>` line from the main agent restarts the handoff chain", async () => {
+    const f = join(root, "ok.jsonl");
+    writeFileSync(f, `${JSON.stringify({ type: "assistant", message: { id: "ok", role: "assistant", content: [{ type: "text", text: "OK 007" }] } })}\n${readFileSync(fixture("stream-basic"), "utf8")}`);
+    const spawn: SpawnFn = (_f, _a, o) => realSpawn(process.execPath, [fake, f, ""], { cwd: o.cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const out = await runPhase({ ...base(), phase: 1, mission: { ...m0("planejando"), handoffs: 8 } }, { spawn });
+    expect(out.mission.handoffs).toBe(0);
+  });
+
+  it("a `BUILD <command>` line from the main agent pauses until the user builds", async () => {
+    const f = join(root, "build.jsonl");
+    writeFileSync(f, `${JSON.stringify({ type: "assistant", message: { id: "b", role: "assistant", content: [{ type: "text", text: "BUILD npm run build" }] } })}\n${readFileSync(fixture("stream-basic"), "utf8")}`);
+    const spawn: SpawnFn = (_f, _a, o) => realSpawn(process.execPath, [fake, f, "hang"], { cwd: o.cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const out = await runPhase({ ...base(), phase: 1, mission: m0("planejando") }, { spawn });
+    expect(out.mission.stage).toBe("pausada");
+    expect(out.mission["pauseReason"]).toBe("build necessário: rode no projeto e clique em Retomar: npm run build");
   });
 
   it("trips on persisted loops without an injected breaker", async () => {

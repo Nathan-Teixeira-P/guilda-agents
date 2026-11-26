@@ -42,7 +42,7 @@ export interface Detalhe { mission: M; package: { files: Arquivo[] } }
 
 const R = (slug: string) => `/redacao/${encodeURIComponent(slug)}`;
 export interface DetalheArtigo { artigo: Artigo; estado: EstadoArtigo; artefatos: string[]; sugestoes: Sugestao[] }
-export interface LimitesRedacao { tetoPp?: number; tetoSemanaPp?: number; tetoUsd?: number; confirmarUso?: boolean }
+export interface LimitesRedacao { tetoPp?: number; tetoSemanaPp?: number; confirmarUso?: boolean }
 
 /** Afiliados panel (display + niches.json only). `configurado: false` means the project is not registered. */
 export type NaoConfigurado = { configurado: false; instrucao: string };
@@ -70,6 +70,7 @@ export const api = {
   subida: (id: string) => call<{ passos: { passo: number; comando: string; motivo: string }[] }>("GET", `/projects/${encodeURIComponent(id)}/subida`),
   sugestoes: (id: string) => call<{ sugestoes: { comando: string; motivo: string }[]; mensagem?: string }>("GET", `/projects/${encodeURIComponent(id)}/sugestoes`),
   setComandos: (id: string, comandos: string[]) => call<{ projeto: Projeto }>("PATCH", `/projects/${encodeURIComponent(id)}/comandos`, { comandos }),
+  eventos: (id: string) => call<{ eventos: unknown[] }>("GET", `/missions/${encodeURIComponent(id)}/eventos`),
   mission: (id: string) => call<Detalhe>("GET", `/missions/${encodeURIComponent(id)}`),
   approve: (id: string) => call<{ mission: M }>("POST", `/missions/${encodeURIComponent(id)}/approve`, {}),
   adjust: (id: string, comment: string) => call<{ mission: M }>("POST", `/missions/${encodeURIComponent(id)}/adjust`, { comment }),

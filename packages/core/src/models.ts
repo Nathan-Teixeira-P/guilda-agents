@@ -6,7 +6,7 @@ export const AGENT_MODELS: Record<string, Model> = {
   orchestrator: "sonnet",
   intake: "haiku",
   planner: "sonnet",
-  "frontend-architect": "opus",
+  "frontend-architect": "sonnet",
   "prd-writer": "sonnet",
   "spec-writer": "sonnet",
   "spec-checker": "haiku",

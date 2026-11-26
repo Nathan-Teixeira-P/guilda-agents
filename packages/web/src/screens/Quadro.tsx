@@ -1,3 +1,4 @@
+import { textoPlano } from "../logic/arsenal.ts";
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { api } from "../api.ts";
 import { erroDeAcao } from "../logic/erros.ts";
@@ -46,7 +47,7 @@ function Card({ m, projeto, now, onChange }: { m: Item; projeto: string; now: nu
       <div className="meta">
         <span>{projeto}</span>
         <span>{formatDesde(m.updatedAt, now)}</span>
-        <span className="muted" title="Custo de tabela, apenas informativo">US$ {m.costUsd.toFixed(2)} info</span>
+        {m.planoGasto && <span className="muted" title="Uso das janelas do plano">{textoPlano(m)}</span>}
       </div>
       {motivo && <p className="motivo"><strong>{m.stage === "pausada" ? "Motivo da pausa" : "Motivo"}:</strong> {motivo}</p>}
       {!m.artigo && <Acoes m={m} onChange={onChange} />}
