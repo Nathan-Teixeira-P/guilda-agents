@@ -57,12 +57,21 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
   const ausentes = (m.promoted ?? []).filter((p) => !(files ?? []).some((f) => f.path === p));
   const nomeProj = live.projects.find((p) => p.id === m.project)?.nome ?? m.project;
   const agentes = linhasAgente([m]);
+  const blocos = m.blocos ?? [];
+  const feitas = m.specsFeitas ?? [];
+  const feito = (i: number) => blocos[i - 1]!.specs.every((s) => feitas.includes(s));
+  const pendentes = blocos.map((_, i) => i + 1).filter((i) => !feito(i));
+  const [marcados, setMarcados] = useState<number[]>(); // undefined = everything pending
+  const escolhidos = pendentes.filter((i) => !marcados || marcados.includes(i));
+  const faltaDep = [...new Set(escolhidos.flatMap((i) => blocos[i - 1]!.depende))].filter((i) => !escolhidos.includes(i) && !feito(i));
+  const semSelecao = blocos.length > 0 && (escolhidos.length === 0 || faltaDep.length > 0);
+  const marcar = (i: number) => setMarcados(escolhidos.includes(i) ? escolhidos.filter((x) => x !== i) : [...escolhidos, i]);
 
   useEffect(() => {
     const f = (e: Event) => {
       const a = (e as CustomEvent<string>).detail;
       if (!aguardando) return;
-      if (a === "selar") setSelando(true);
+      if (a === "selar") setSelando(true); // the server refuses a bad selection
       if (a === "ajustes") comentRef.current?.focus();
     };
     window.addEventListener("atalho", f);
@@ -71,7 +80,7 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
 
   async function selar() {
     setBusy(true); setErro(undefined); setRecusado(false);
-    const r = await api.approve(m.id);
+    const r = await api.approve(m.id, blocos.length ? escolhidos : undefined);
     setBusy(false); setSelando(false);
     if (!r.ok) { setErro(erroDeAcao(r)); setRecusado(r.status === 409 && /approval gate/i.test(r.error)); if (r.status === 409) onChange(); return; }
     const d = duracaoCarimbo(reduzido());
@@ -127,11 +136,29 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
           <ul className="lista-simples">{m.avisosSpecs!.map((a) => <li key={a} className="mono">{a}</li>)}</ul>
         </div>
       )}
+      {blocos.length > 0 && (
+        <fieldset style={{ border: 0, padding: 0, margin: "var(--e-3) 0" }}>
+          <legend><strong>Esta demanda foi dividida em {blocos.length} bloco{blocos.length === 1 ? "" : "s"}</strong> · {blocos.length - pendentes.length} feito(s), falta(m) {pendentes.length}</legend>
+          <ul className="lista-simples">
+            {blocos.map((b, k) => (
+              <li key={k}>
+                <label>
+                  {aguardando && !feito(k + 1) && <input type="checkbox" checked={escolhidos.includes(k + 1)} onChange={() => marcar(k + 1)} />}{" "}
+                  <span className={feito(k + 1) ? "ok" : undefined}>{feito(k + 1) ? "✓ Feito · " : ""}{k + 1}. {b.nome}</span>
+                  <span className="muted small"> · specs {b.specs.join(", ")}{b.depende.length ? ` · depende do bloco ${b.depende.join(", ")}` : ""}{!feito(k + 1) && b.specs.some((s) => feitas.includes(s)) ? ` · feitas: ${b.specs.filter((s) => feitas.includes(s)).join(", ")}` : ""}</span>
+                  {b.resumo && <span className="muted small" style={{ display: "block" }}>{b.resumo}</span>}
+                </label>
+              </li>
+            ))}
+          </ul>
+          {aguardando && faltaDep.length > 0 && <p className="warn" role="alert">Marque também o(s) bloco(s) {faltaDep.join(", ")}: os escolhidos dependem dele(s).</p>}
+        </fieldset>
+      )}
       {recusado && <div className="selo-recusado"><Seal rachado tamanho={64} /></div>}
       {erro && <p className="err" role="alert">{erro}</p>}
       {aguardando && (
         <>
-          <button type="button" className="btn primario selar" disabled={busy} onClick={() => setSelando(true)}>Selar (A)</button>
+          <button type="button" className="btn primario selar" disabled={busy || semSelecao} onClick={() => setSelando(true)}>{blocos.length === 0 || escolhidos.length === pendentes.length ? "Selar tudo (A)" : `Selar ${escolhidos.length} bloco(s) (A)`}</button>
           <div className="field" style={{ marginTop: "var(--e-4)" }}>
             <label htmlFor="aj-c">Pedir ajustes (J): o que mudar no plano</label>
             <textarea id="aj-c" ref={comentRef} value={coment} onChange={(e) => setComent(e.target.value)} maxLength={20000} style={{ minHeight: 110 }} aria-invalid={tentou && !coment.trim()} aria-describedby={tentou && !coment.trim() ? "aj-e" : undefined} />
@@ -149,6 +176,7 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
       {m.stage === "parada" && <PausaPanel m={m} onDone={onChange} />}
       {m.stage === "concluida" && <p className="panel field ok" role="status">Missão concluída. O pacote continua disponível para leitura.</p>}
       {m.stage === "concluida" && (() => { const r = (m as unknown as { resumo?: Resumo }).resumo; return r ? <ResumoCard r={r} /> : <p className="hint">Esta missão não gerou resumo (missões anteriores a este recurso, ou o agente não o escreveu).</p>; })()}
+      {aguardando && feitas.length > 0 && (() => { const r = (m as unknown as { resumo?: Resumo }).resumo; return r ? <ResumoCard r={r} /> : null; })()}
       <div className={`guerra${carimbando ? " tranco" : ""}`}>
         <nav className="indice" aria-label="Pacote da missão">
           <h2>Pacote</h2>
@@ -195,16 +223,16 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
       {aguardando && mobile && (
         <div className="barra-fixa">
           <button type="button" className="btn" onClick={() => comentRef.current?.focus()}>Ajustes</button>
-          <button type="button" className="btn primario" disabled={busy} onClick={() => setSelando(true)}>Selar</button>
+          <button type="button" className="btn primario" disabled={busy || semSelecao} onClick={() => setSelando(true)}>Selar</button>
         </div>
       )}
       {carimbando && <div className="carimbo-palco" role="status"><Seal tamanho={160} carimbando /><span className="sr-only">Missão selada.</span></div>}
       <ConfirmDialog aberto={selando} titulo="Selar a missão?" onFechar={() => setSelando(false)}>
-        <p style={{ margin: "var(--e-3) 0" }}>Selar “{(m.demanda ?? "").split("\n")[0]?.trim() || m.id}” em {nomeProj}? A execução começa agora e gasta o plano da sua conta Claude.</p>
+        <p style={{ margin: "var(--e-3) 0" }}>Selar “{(m.demanda ?? "").split("\n")[0]?.trim() || m.id}” em {nomeProj}? {blocos.length > 0 ? `Blocos: ${escolhidos.join(", ")} de ${blocos.length}. ` : ""}A execução começa agora e gasta o plano da sua conta Claude.</p>
         {ausentes.length > 0 && <p className="warn" role="note">Atenção: {ausentes.length} arquivo(s) do pacote não foram encontrados e não puderam ser lidos.</p>}
         <div className="row" style={{ marginTop: "var(--e-5)" }}>
           <button type="button" className="btn" autoFocus onClick={() => setSelando(false)}>Cancelar</button>
-          <button type="button" className="btn primario selo-btn" disabled={busy} onClick={selar}><Seal tamanho={40} />{busy ? "Selando…" : "Selar"}</button>
+          <button type="button" className="btn primario selo-btn" disabled={busy || semSelecao} onClick={selar}><Seal tamanho={40} />{busy ? "Selando…" : "Selar"}</button>
         </div>
       </ConfirmDialog>
     </>

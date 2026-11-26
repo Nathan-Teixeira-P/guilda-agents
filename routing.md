@@ -42,7 +42,7 @@ Lab runs on a single Claude Pro account (no API). The real limit is plan usage (
 
 ## Classification
 
-The hub checks drafted specs mechanically; `spec-checker` is not part of the mission chain. LEAN demands (docs, config, one-file or small change) run `explorer` + a short plan only: no planner, PRD or specs. FULL demands run the whole chain.
+The hub checks drafted specs mechanically; `spec-checker` is not part of the mission chain. LEAN demands (docs, config, one-file or small change) run `explorer` + a short plan only: no planner, PRD or specs. STANDARD demands (one clear feature, up to 5 specs) run `explorer → spec-writer`, which writes the plan and the specs. FULL demands (ambiguity, product decisions, several features or more than 5 specs) run the whole chain.
 
 ## Escalation
 

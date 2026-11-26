@@ -10,6 +10,7 @@ import { conferirSpecs } from "@lab/core/src/specs.ts";
 import { somarGasto, type Gasto } from "@lab/core/src/plan-budget.ts";
 import { MAX_FILE_BYTES } from "@lab/core/src/promote.ts";
 import { newMission, transition, type Mission } from "@lab/core/src/mission.ts";
+import { dependenciasFaltando, montarBlocos, blocoFeito, type Bloco } from "@lab/core/src/blocos.ts";
 import { normalizar, PROJECT_ID, analisarProjeto, analisarSubida, resolverProjeto, validarClickupUrl, validarComando, validarOrigem, type LeitorProjeto, type Projeto } from "@lab/core/src/projects.ts";
 import { checkPasta, cloneRepo, type CloneResult } from "./clone.ts";
 import { gravarEvento, lerEventos } from "./event-log.ts";
@@ -86,6 +87,7 @@ const Adjust = z.object({ comment: z.string().min(1).max(20_000) });
 const Continuar = z.object({ comment: z.string().min(1).max(20_000) });
 const Resume = z.object({ comment: z.string().min(1).max(20_000).optional() });
 const Empty = z.object({});
+const Approve = z.object({ blocos: z.array(z.number().int().positive()).min(1).max(100).optional() });
 const Cap = z.number().positive().max(100).nullable().optional(); // null removes the cap
 const EditMission = z.object({ demanda: z.string().min(1).max(20_000).optional(), tetoPp: Cap, tetoSemanaPp: Cap });
 const PutLocal = z.object({ enabled: z.boolean().optional(), model: z.string().min(1).max(100).optional() }).strict();
@@ -240,14 +242,25 @@ export function createServer(o: ServerOpts) {
           },
         });
         let cur: Mission = out.mission;
+        if (phase === 2 && out.specsOk?.length) cur = { ...cur, specsFeitas: [...new Set([...feitasDe(cur), ...out.specsOk.map((s) => Number(/\d+/.exec(s)?.[0])).filter(Boolean)])] };
         const usoDepois = usage.atual();
         if (usoAntes.estado === "ok" && usoDepois.estado === "ok") cur = { ...cur, planoGasto: somarGasto(cur["planoGasto"] as Gasto | undefined, usoAntes, usoDepois) };
         if (phase === 1 && cur.stage === "aguardando-aprovacao") {
           const r = promoteDraft(join(store.dirOf(m.id), "out"), proj);
-          cur = r.ok ? { ...cur, promoted: r.promoted, avisosSpecs: conferirSpecs(r.promoted.filter((p) => p.startsWith("specs/")).map((p) => ({ name: p.slice(6), text: readFileSync(join(store.dirOf(m.id), "out", p), "utf8") }))) } : { ...transition(cur, "parada", { now: clock }), stopReason: `promotion failed: ${r.reason}` };
+          if (r.ok) {
+            const ler = (p: string) => readFileSync(join(store.dirOf(m.id), "out", p), "utf8");
+            const textos = r.promoted.filter((p) => p.startsWith("specs/")).map((p) => ({ name: p.slice(6), text: ler(p) }));
+            const b = montarBlocos(r.promoted.includes("handoff/blocks.json") ? ler("handoff/blocks.json") : undefined, textos.filter((f) => /^\d.*\.spec\.md$/.test(f.name)));
+            cur = { ...cur, promoted: r.promoted, avisosSpecs: [...conferirSpecs(textos), ...(b.aviso ? [b.aviso] : [])], blocos: b.blocos };
+          } else cur = { ...transition(cur, "parada", { now: clock }), stopReason: `promotion failed: ${r.reason}` };
         } else if (phase === 2 && cur.stage === "concluida") {
           const r = lerResumo(resumoPath(m));
           if (r) cur = { ...cur, resumo: r };
+          // blocks left unsealed: close the gate and go back to the user's approval
+          if (!continuacao && blocosDe(cur).some((b) => !blocoFeito(b, feitasDe(cur)))) {
+            rmSync(join(store.dirOf(m.id), GATE_FILE), { force: true });
+            cur = { ...transition(cur, "aguardando-aprovacao", { now: clock }), blocosSel: undefined };
+          }
         } else if (cur.stage === "parada") cur = { ...cur, stopReason: out.stopped ?? "stopped" };
         save(cur);
       } catch (e) {
@@ -264,6 +277,19 @@ export function createServer(o: ServerOpts) {
     (Array.isArray(m["promoted"]) ? (m["promoted"] as unknown[]) : [])
       .filter((p): p is string => typeof p === "string" && /^specs\/\d.*\.spec\.md$/.test(p))
       .map((p) => join(projectPath(m) ?? "", ".claude", p));
+
+  const blocosDe = (m: Mission) => (Array.isArray(m["blocos"]) ? (m["blocos"] as Bloco[]) : []);
+  const feitasDe = (m: Mission) => (Array.isArray(m["specsFeitas"]) ? (m["specsFeitas"] as number[]) : []);
+  const numeroDe = (spec: string) => Number(/(\d+)[^/]*$/.exec(spec)?.[1]);
+
+  /** Phase 2 input limited to the sealed blocks, minus specs already done. */
+  const fase2Input = (m: Mission) => {
+    const sel = Array.isArray(m["blocosSel"]) ? (m["blocosSel"] as number[]) : undefined;
+    const escolhidas = new Set(blocosDe(m).filter((_, i) => !sel || sel.includes(i + 1)).flatMap((b) => b.specs));
+    const todas = specsOf(m);
+    const specs = blocosDe(m).length ? todas.filter((p) => escolhidas.has(numeroDe(p)) && !feitasDe(m).includes(numeroDe(p))) : todas;
+    return { specs, projetoPath: projectPath(m) ?? "", adiadas: todas.length - specs.length, ...(o.hubDir ? { hubDir: o.hubDir } : {}) };
+  };
 
   const prompt1 = (m: Mission, comment?: string, retomada = false) => {
     const p = registry.get(m.project);
@@ -785,14 +811,22 @@ export function createServer(o: ServerOpts) {
     if (method !== "POST" || !action) throw new HttpError(404, "not found");
 
     if (action === "approve") {
-      await json(req, Empty);
+      const b = await json(req, Approve);
       const m = mustGet(id);
       if (m.stage !== "aguardando-aprovacao") throw new HttpError(409, `cannot approve in stage ${m.stage}`);
+      const blocos = blocosDe(m);
+      const pendentes = blocos.map((_, i) => i + 1).filter((i) => !blocoFeito(blocos[i - 1]!, feitasDe(m)));
+      const sel = (b.blocos ?? pendentes).filter((i) => pendentes.includes(i));
+      if (blocos.length) {
+        if (!sel.length) throw new HttpError(409, "nenhum bloco pendente selecionado");
+        const faltam = dependenciasFaltando(blocos, sel, feitasDe(m));
+        if (faltam.length) throw new HttpError(409, `os blocos escolhidos dependem do(s) bloco(s) ${faltam.join(", ")}`);
+      }
       // Everything below is synchronous, so a double click cannot start phase 2 twice.
       writeFileSync(join(store.dirOf(id), GATE_FILE), JSON.stringify({ approved: true, approvedAt: clock().toISOString() }));
-      const next = intervene(transition(m, "executando", { now: clock, approved: true }));
+      const next = intervene(transition(blocos.length ? { ...m, blocosSel: sel } : m, "executando", { now: clock, approved: true }));
       save(next);
-      launch(next, 2, promptFase2({ specs: specsOf(m), projetoPath: projectPath(m) ?? "", ...(o.hubDir ? { hubDir: o.hubDir } : {}) }));
+      launch(next, 2, promptFase2(fase2Input(next)));
       return send(res, 202, { mission: next });
     }
     if (action === "adjust") {
@@ -803,7 +837,8 @@ export function createServer(o: ServerOpts) {
       const { sessionId: _drop, ...rest } = transition(m, "planejando", { now: clock });
       const next = intervene(rest as Mission);
       save(next);
-      launch(next, 1, prompt1(next, b.comment));
+      const feitas = feitasDe(next);
+      launch(next, 1, prompt1(next, feitas.length ? `${b.comment}\nSpecs ${feitas.join(", ")} are already implemented: keep their numbers and files.` : b.comment, feitas.length > 0));
       return send(res, 202, { mission: next });
     }
     if (action === "resume") {
@@ -820,7 +855,7 @@ export function createServer(o: ServerOpts) {
         save(next);
         const construiu = String(m["pauseReason"] ?? "").startsWith("build necessário") ? "The user ran the requested build and pressed continue: verify what was waiting for it, then go on. Do not ask for the same build again." : "";
         const comentario = [construiu, b.comment].filter(Boolean).join("\n");
-        launch(next, 2, promptFase2({ specs: specsOf(m), projetoPath: projectPath(m) ?? "", retomada: true, ...(o.hubDir ? { hubDir: o.hubDir } : {}), ...(comentario ? { comentario } : {}) }));
+        launch(next, 2, promptFase2({ ...fase2Input(next), retomada: true, ...(comentario ? { comentario } : {}) }));
         return send(res, 202, { mission: next });
       }
       // phase 1 resumes like adjust: fresh session carrying the comment, auditing what was already drafted

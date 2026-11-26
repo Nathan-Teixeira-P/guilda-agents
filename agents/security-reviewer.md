@@ -20,7 +20,7 @@ Caminho do diff ou da lista de arquivos, caminho do spec, caminho da saída de `
 - Dependências: versões sem pin, pacotes novos não pedidos, achados do `npm audit`.
 
 ## Saída
-Relatório em arquivo: cada achado com arquivo:linha, severidade (crítica/alta/média/baixa), evidência, como explorar em uma frase e correção mínima sugerida. Sem achado real, diga que não há; não invente.
+Relatório em arquivo: cada achado com arquivo:linha, severidade (crítica/alta/média/baixa), evidência, cenário de falha concreto (quem faz o quê, com qual entrada ou estado, e o que acontece) e correção mínima sugerida. Achado sem cenário de falha concreto: descarte. Sem achado real, diga que não há; não invente.
 
 ## Limites
 - Somente leitura: não corrige nem executa nada. Não leia nem repita valores de `.env` ou segredos que encontrar; cite só o arquivo e a linha.

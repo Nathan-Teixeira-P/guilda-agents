@@ -38,6 +38,7 @@ export interface RunOpts {
   signal?: AbortSignal; // abort = kill the child and end the mission (`parada`)
 }
 export interface RunOutcome {
+  specsOk?: string[]; // specs the orchestrator marked with `OK <n>`
   mission: Mission;
   stopped?: string; // why the server killed or parked the run
   lastResult?: Result; // last non-empty `result` (several can occur per run)
@@ -263,6 +264,7 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
   let anon = 0;
   const ultimoBash = new Map<string, string>();
   const specsOk = new Set<string>();
+  out.specsOk = [];
   const tripBreaker = () => {
     const injected = o.breaker?.get();
     const s = injected ? { ...injected, handoffs: bs.handoffs } : bs;
@@ -294,7 +296,7 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
       const build = e.agent === MAIN_AGENT ? /^BUILD\s+(.{1,300})$/m.exec(e.text)?.[1]?.trim() : undefined;
       if (build) stop(`build: ${build}`, `rode no projeto e clique em Retomar: ${build}`);
       // a spec that passed the tester makes the chain limit start over (once per spec; the rework limit still applies)
-      if (e.agent === MAIN_AGENT) for (const x of e.text.matchAll(/^OK\s+([\w.-]+)\s*$/gm)) if (!specsOk.has(x[1]!)) { specsOk.add(x[1]!); bs = { ...bs, handoffs: 0 }; }
+      if (e.agent === MAIN_AGENT) for (const x of e.text.matchAll(/^OK\s+([\w.-]+)\s*$/gm)) if (!specsOk.has(x[1]!)) { specsOk.add(x[1]!); out.specsOk!.push(x[1]!); bs = { ...bs, handoffs: 0 }; }
     } else if (e.kind === "usage") {
       const t = e.tokens;
       tokensByMsg.set(e.messageId || `anon-${anon++}`, { agent: e.agent, total: t.input + t.output + t.cacheRead + t.cacheCreation });

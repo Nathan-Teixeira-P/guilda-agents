@@ -44,7 +44,7 @@ const NEXT: Record<Stage, readonly Stage[]> = {
   "aguardando-aprovacao": ["executando", "planejando", "parada"],
   executando: ["concluida", "pausada", "parada"],
   pausada: ["planejando", "executando", "parada"],
-  concluida: ["executando"], // follow-up: the user continues the same session with a new request (gate already sealed)
+  concluida: ["executando", "aguardando-aprovacao"], // follow-up in the same session, or blocks still unsealed
   parada: ["planejando", "executando"], // a recolhida can be taken up again by the user (the caller decides the phase)
 };
 

@@ -14,13 +14,7 @@ describe("promptFase1", () => {
     expect(p).toMatch(/never commit or push/i);
     expect(p).toMatch(/subagents? (cannot|can't|do not|don't) (create|spawn|call)/i);
     expect(p).toMatch(/one at a time/i);
-    expect(p).toMatch(/LEAN.*no planner, PRD, specs/);
-  });
-  it("names the sequence explorer, planner, prd-writer, spec-writer", () => {
-    const p = promptFase1(base);
-    const at = ["explorer", "planner", "prd-writer", "spec-writer"].map((n) => p.indexOf(n));
-    expect(at.every((i) => i >= 0)).toBe(true);
-    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(p).toMatch(/LEAN.*no planner, PRD, specs.*STANDARD.*no planner, no PRD.*FULL.*explorer, planner, prd-writer, spec-writer/);
   });
   it("appends project notes capped at the limit, and omits the section without notes", () => {
     expect(promptFase1(base)).not.toMatch(/project notes/i);
@@ -33,7 +27,7 @@ describe("promptFase1", () => {
     expect(promptFase1({ ...base, comentario: "more tests" })).toContain("more tests");
   });
   it("stays short: no file contents, only fixed text plus inputs", () => {
-    expect(promptFase1(base).length).toBeLessThan(2500);
+    expect(promptFase1(base).length).toBeLessThan(2700);
   });
 });
 
@@ -70,4 +64,10 @@ describe("instrucaoExecucao", () => {
     expect(instrucaoExecucao([], "/hub/scripts/go-test.sh")).toContain("/hub/scripts/go-test.sh ./pkg/");
     expect(instrucaoExecucao([], "/g")).toContain("BUILD <command>");
   });
+});
+
+it("execution instructions require the security gate and unrun checks in the handoff", () => {
+  const p = instrucaoExecucao([]);
+  expect(p).toContain("call security-reviewer after the tester passes");
+  expect(p).toContain("NOT run or verified");
 });

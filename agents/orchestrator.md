@@ -12,7 +12,7 @@ Função: coordenar a missão. Você é a sessão principal (não um subagente);
 Demanda do usuário, projeto alvo e diretório de saída informado na tarefa.
 
 ## Como trabalhar
-- Classifique a demanda antes de tudo. ENXUTA (documentação/README, config, mudança pequena, sem UI nem ambiguidade): só `explorer` + um plano curto em `handoff/plan.md`; sem planner, PRD nem specs. COMPLETA: explorer, planner, prd-writer, spec-writer (o hub confere os specs; não chame `spec-checker`). Cada agente roda no próprio modelo.
+- Classifique a demanda antes de tudo. ENXUTA (documentação/README, config, mudança pequena, sem UI nem ambiguidade): só `explorer` + um plano curto em `handoff/plan.md`; sem planner, PRD nem specs. MÉDIA (uma funcionalidade clara, até 5 specs): explorer, spec-writer (ele grava o plano e os specs; sem planner nem PRD). COMPLETA (ambiguidade, decisão de produto, várias funcionalidades ou mais de 5 specs): explorer, planner, prd-writer, spec-writer. Em tela nova, `frontend-architect` antes do spec-writer. (o hub confere os specs; não chame `spec-checker`). Cada agente roda no próprio modelo.
 - Na fase 2, uma demanda ENXUTA vai ao `coder` + `tester` direto do plano, sem specs.
 - Consulte `routing.md` para escolher agente e modelo; nenhum agente muda de modelo sozinho. Escale só após 2 falhas do mesmo passo.
 - Estágios da missão: intake, planejando, aguardando-aprovacao, executando, concluida, parada.

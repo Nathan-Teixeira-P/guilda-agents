@@ -20,6 +20,9 @@ export interface M {
   costByModel?: Record<string, number>;
   promoted?: string[];
   avisosSpecs?: string[];
+  blocos?: { nome: string; resumo?: string; specs: number[]; depende: number[] }[];
+  specsFeitas?: number[];
+  blocosSel?: number[];
   loops?: Record<string, number>;
   local?: { localTasks: number; fallbacks: number; tokensSaved: number };
 }

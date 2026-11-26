@@ -12,7 +12,7 @@ Função: implementar um único spec com TDD, com o menor diff que cumpre os cri
 Caminho do spec, caminho do mapa do `explorer`, caminho do handoff anterior (se houver) e projeto alvo.
 
 ## Saída
-Código e testes no projeto alvo; relatório curto em arquivo (o que mudou, comandos rodados, pendências).
+Código e testes no projeto alvo; relatório curto em arquivo: o que mudou; evidência (cada comando rodado e o resultado); **não rodado/não verificado** (e por quê); pendências. Nunca descreva como testado o que não rodou.
 
 ## Limites
 - Leia o mapa do `explorer` primeiro; busque só o que ele não cobre.

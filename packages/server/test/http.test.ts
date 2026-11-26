@@ -507,3 +507,38 @@ describe("project commands (spec 024)", () => {
     expect(got.join("")).toContain("sem comandos de teste configurados");
   });
 });
+
+describe("delivery blocks", () => {
+  it("seals some blocks, returns to approval with what is done, then finishes", async () => {
+    const rodadas: string[] = [];
+    let ok: string[] = ["001"];
+    const blocked = (o: RunOpts) => {
+      if (o.phase === 1) {
+        const out = join(o.missionsDir, o.mission.id, "out");
+        mkdirSync(join(out, "specs"), { recursive: true });
+        mkdirSync(join(out, "handoff"), { recursive: true });
+        writeFileSync(join(out, "specs/001-a.spec.md"), "---\ndependencies: []\n---");
+        writeFileSync(join(out, "specs/002-b.spec.md"), "---\ndependencies: [001]\n---");
+        writeFileSync(join(out, "handoff/blocks.json"), JSON.stringify([{ nome: "A", specs: [1] }, { nome: "B", specs: [2] }]));
+        return Promise.resolve({ mission: transition(o.mission, "aguardando-aprovacao", { now: clock }) }) as never;
+      }
+      rodadas.push(o.prompt);
+      return Promise.resolve({ mission: transition(o.mission, "concluida", { now: clock }), specsOk: ok }) as never;
+    };
+    srv = createServer({ runner: blocked, store: createStore(missionsDir), clock, host: "127.0.0.1", projects: { proj: project } });
+    port = await srv.listen(0);
+    const id = await create();
+    await until(id, "aguardando-aprovacao");
+    expect((await call("POST", `/missions/${id}/approve`, { blocos: [2] })).status).toBe(409); // needs block 1
+    expect((await call("POST", `/missions/${id}/approve`, { blocos: [1] })).status).toBe(202);
+    await until(id, "aguardando-aprovacao");
+    expect(rodadas[0]).toContain("001-a.spec.md");
+    expect(rodadas[0]!.split("Security gate")[0]).not.toContain("002-b.spec.md");
+    expect((await call("GET", `/missions/${id}`)).json.mission.specsFeitas).toEqual([1]);
+    expect(isApproved(join(missionsDir, id))).toBe(false); // new blocks need a new seal
+    ok = ["002"];
+    expect((await call("POST", `/missions/${id}/approve`, {})).status).toBe(202);
+    await until(id, "concluida");
+    expect(rodadas[1]).toContain("002-b.spec.md");
+  });
+});
