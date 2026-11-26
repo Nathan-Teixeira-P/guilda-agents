@@ -42,11 +42,12 @@ it("two jumpers take turns: climb, dive into the hay, come back", () => {
   for (let t = 0; t < 22_000; t += 100) expect((saltador(t, 0).alt ?? 0) > 0 && (saltador(t, 1).alt ?? 0) > 0).toBe(false);
 });
 
-it("climbers go up and come back down; only one is on the rope at a time", () => {
-  expect(escalador(0, 0).alt).toBe(0);
-  expect(escalador(3000, 0)).toMatchObject({ alt: TORRE_ALT, x: CORDA_X });
-  expect(escalador(7000, 0).alt).toBe(0);
-  for (let t = 0; t < 20_000; t += 100) expect(escalador(t, 0).alt! > 0 && escalador(t, 2).alt! > 0).toBe(false);
+it("each climber goes up the wall, walks the top to the rope and slides down, one at a time", () => {
+  expect(escalador(1800, 0)).toMatchObject({ gesto: "sobe" });
+  expect(escalador(3300, 0)).toMatchObject({ gesto: "anda", alt: TORRE_ALT });
+  expect(escalador(4400, 0).x).toBe(CORDA_X);
+  expect(escalador(4999, 0).alt).toBeCloseTo(0, 0);
+  for (let t = 0; t < 30_000; t += 100) expect([0, 1, 2].filter((v) => escalador(t, v).alt! > 0.5).length).toBeLessThanOrEqual(1);
 });
 it("the thrower sticks three knives in the straw man and then fetches them", () => {
   expect(arremesso(100).pose.arma).toBe("faca");

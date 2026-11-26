@@ -4,7 +4,7 @@ import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader.js";
 import { anguloRitmo, arcoUso, contagem, ESCALA, paraMundo } from "../logic/cena3d.ts";
 import { adiantado, efetivo, ritmo, type Uso } from "../logic/emblem.ts";
 import type { Atividade } from "../logic/escritorio.ts";
-import { PORTARIA, posicionar as dispor, TREINO, type SalaProjeto } from "../logic/fortaleza.ts";
+import { PORTARIA, REGENTE_X, posicionar as dispor, TREINO, type SalaProjeto } from "../logic/fortaleza.ts";
 import { ALVO_X, BONECOS, bracos, CORDA_X, VITIMA_X, criarTreino, ESCALADA_X, FENO_X, RAIAS, SALTO_Y, TORRE_ALT, TORRE_X } from "../logic/treino.ts";
 import { membro, ROSTER } from "../roster.ts";
 import { INSIGNIA } from "./Avatar.tsx";
@@ -251,6 +251,16 @@ export function criarMundo(o: Opcoes): Mundo {
       tocha(lado * 3.3, frente + 0.45, lado + 6);
     }
     caixa(mundo, 5.1, 0.45, 0.6, pedra, 0, 3.0, frente);
+    { // the Regente's desk, in front of where he stands: map, candle and inkwell
+      const mz = az(PORTARIA.y + 57) + 0.55, mx = ax(REGENTE_X);
+      caixa(mundo, 2.2, 0.12, 0.7, madeira, mx, 0.82, mz);
+      caixa(mundo, 1.9, 0.5, 0.08, madeira, mx, 0.52, mz + 0.24);
+      for (const sx of [-0.95, 0.95]) caixa(mundo, 0.14, 0.78, 0.55, madeira, mx + sx, 0.39, mz);
+      caixa(mundo, 0.9, 0.03, 0.45, pergaminho, mx - 0.15, 0.9, mz, false);
+      caixa(mundo, 0.09, 0.3, 0.09, pergaminho, mx + 0.8, 1.03, mz, false);
+      const vela = new THREE.Mesh(G(new THREE.ConeGeometry(0.07, 0.18, 6)), chama); vela.position.set(mx + 0.8, 1.27, mz); mundo.add(vela);
+      caixa(mundo, 0.16, 0.16, 0.16, aco, mx - 0.85, 0.96, mz, false);
+    }
     for (const gx of [-1.1, -0.55, 0, 0.55, 1.1]) caixa(mundo, 0.07, 0.6, 0.07, aco, gx, 2.5, frente, false); // raised portcullis
     const nome = placaNome("Portaria", lixo); nome.position.set(-c.w / 2 + 3.6, 0.08, az(PORTARIA.y + 52)); mundo.add(nome);
     temas.push(() => { const novo = placaNome("Portaria", lixo); (nome.material as THREE.MeshBasicMaterial).map = (novo.material as THREE.MeshBasicMaterial).map; });
@@ -264,21 +274,19 @@ export function criarMundo(o: Opcoes): Mundo {
     caixote(mundo, ax(190), gz, 0.9); caixote(mundo, ax(214), gz + 0.2, 0.6);
     caixote(mundo, ax(600), gz + 0.2, 0.6); caixote(mundo, ax(626), gz, 0.9);
     for (const px of [728, 750]) barril(mundo, ax(px), gz);
-    for (const px of [262, 538]) braseiro(mundo, ax(px), gz);
+    for (const px of [262, 576]) braseiro(mundo, ax(px), gz);
     const tz = az(TREINO.y + 30);
     braseiro(mundo, ax(396), tz); barril(mundo, ax(180), tz); barril(mundo, ax(200), tz + 0.3); caixote(mundo, ax(530), tz);
     { // the climbing tower: wall behind the climbers, with holds and a crenellated top
-      const cx = ax(ESCALADA_X[1]), cz = az(SALTO_Y - 14), h = TORRE_ALT * ESCALA + 0.4;
+      const cx = ax(ESCALADA_X[1]), cz = az(SALTO_Y - 10), h = TORRE_ALT * ESCALA - 0.2; // walkway top = where the climbers stand
       const clara = std(0x8f7a6c, 0xcdbb98);
       caixa(mundo, 3.4, h, 0.4, clara, cx, h / 2, cz);
       const rx = ax(CORDA_X), rz = az(SALTO_Y), corda = std(0xc9a56a, 0xa8864f);
-      caixa(mundo, cx - rx, 0.16, 0.16, madeira, (cx + rx) / 2, h + 0.05, cz);
-      caixa(mundo, 0.16, 0.16, rz - cz, madeira, rx, h + 0.05, (rz + cz) / 2);
       caixa(mundo, 0.09, h, 0.09, corda, rx, h / 2, rz);
       for (let n = 1; n <= 5; n++) caixa(mundo, 0.18, 0.12, 0.18, corda, rx, n * 0.55, rz, false);
       for (let i = 0; i < 18; i++) caixa(mundo, 0.35, 0.14, 0.18, bronze, cx - 1.4 + (i % 3) * 1.1 + (Math.floor(i / 3) % 2) * 0.35, 0.4 + Math.floor(i / 3) * 0.5, cz + 0.28, false);
-      caixa(mundo, 3.9, 0.2, 0.8, madeira, cx, h + 0.1, cz);
-      for (const dx of [-1.6, -0.55, 0.55, 1.6]) caixa(mundo, 0.4, 0.4, 0.4, pedraEsc, cx + dx, h + 0.4, cz);
+      caixa(mundo, cx - ax(CORDA_X) + 1.9, 0.2, 1.4, madeira, (ax(CORDA_X) + cx + 1.9) / 2, h + 0.1, cz + 0.35);
+      for (const dx of [-1.6, -0.55, 0.55, 1.6]) caixa(mundo, 0.4, 0.4, 0.3, pedraEsc, cx + dx, h + 0.4, cz - 0.35);
     }
     { // the straw man for the knives, facing the thrower
       const x = ax(VITIMA_X), z = az(RAIAS[1]), fibra = std(0xb98a3a, 0xd9b062);

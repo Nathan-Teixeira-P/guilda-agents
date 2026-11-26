@@ -12,7 +12,7 @@ export interface Quadro { poses: Record<string, Pose>; flechas: Flecha[]; faisca
 export const RAIAS = [383, 450] as const;
 export const ARQUEIRO_X = 540, ALVO_X = 750;
 export const BONECOS = [416, 476] as const;
-const CICLO_ARCO = 11_000, TIRO = 1800, CICLO_FACA = 7600, ARREMESSO = 1300, ESPALHA = [-6, 1, 7], CICLO_ESPADA = 2400, CICLO_SALTO = 11_000;
+const CICLO_ARCO = 11_000, TIRO = 1800, CICLO_FACA = 7600, ARREMESSO = 1300, TURNO = 5000, ESPALHA = [-6, 1, 7], CICLO_ESPADA = 2400, CICLO_SALTO = 11_000;
 export const FENO_X = 96, TORRE_X = 146, SALTO_Y = 318, TORRE_ALT = 58;
 export const ESCALADA_X = [696, 718, 740] as const; // three holds on the climbing tower, across the hall
 export const CORDA_X = 666, FACA_X = 365, VITIMA_X = 478;
@@ -70,15 +70,17 @@ export function saltador(t: number, vez: number): Omit<Pose, "dist"> {
   return p(espera, "descanso");
 }
 
-/** Climbing drill. The middle one uses the holds of the wall; the other two take turns on the rope: up hand over hand, hold, slide down, step aside. */
+/** The climbing circuit, one at a time: up the wall, across the top of the tower to the rope, down the rope, back to the queue. */
 export function escalador(t: number, vez: number): Omit<Pose, "dist"> {
-  const corda = vez !== 1, ciclo = corda ? 10_000 : 8000;
-  const c = (((t + (vez === 2 ? ciclo / 2 : 0)) % ciclo) + ciclo) % ciclo;
-  const alto = c < 400 ? 0 : c < 2800 ? trecho(c, 400, 2800) : c < 3400 ? 1 : 1 - trecho(c, 3400, 4600);
-  const noChao = alto === 0;
-  // whoever is waiting for the rope stands clear of it
-  const x = !corda ? ESCALADA_X[1] : noChao && (c < 150 || c > 4800) ? CORDA_X - 20 - vez * 9 : CORDA_X;
-  return { x, y: SALTO_Y, face: 1, gesto: noChao ? "descanso" : "sobe", k: alto, arma: "nada", alt: TORRE_ALT * alto };
+  const ciclo = 3 * TURNO, c = (((t - vez * TURNO) % ciclo) + ciclo) % ciclo;
+  const parede = ESCALADA_X[2], fila = CORDA_X - 22 - vez * 28;
+  const p = (x: number, gesto: Gesto, alt = 0, k = 0, face: 1 | -1 = 1): Omit<Pose, "dist"> => ({ x, y: SALTO_Y, face, gesto, k, arma: "nada", alt });
+  if (c < 800) return p(fila + (parede - fila) * trecho(c, 0, 800), "anda");
+  if (c < 2800) { const k = trecho(c, 800, 2800); return p(parede, "sobe", TORRE_ALT * k, k); }
+  if (c < 3800) return p(parede + (CORDA_X - parede) * trecho(c, 2800, 3800), "anda", TORRE_ALT, 0, -1);
+  if (c < TURNO) { const k = 1 - trecho(c, 3800, TURNO); return p(CORDA_X, "sobe", TORRE_ALT * k, k, -1); }
+  if (c < TURNO + 700) return p(CORDA_X + (fila - CORDA_X) * trecho(c, TURNO, TURNO + 700), "anda", 0, 0, -1);
+  return p(fila, "descanso");
 }
 
 /** Knife thrower: three knives into the straw man, walk there, pull them out, walk back. */

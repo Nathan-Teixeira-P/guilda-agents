@@ -120,6 +120,15 @@ export function Cena({ live, selecionado, onSelecionar }: { live: Live; selecion
           </g>
         );
       })}
+      {/* the Regente's desk, drawn over his legs: map, candle and inkwell */}
+      <g transform={`translate(${lugar["orchestrator"]!.x} ${lugar["orchestrator"]!.y})`} pointerEvents="none" aria-hidden="true">
+        <path d="M-24 -14V0M24 -14V0" stroke="#3a2416" strokeWidth="4" />
+        <rect x="-30" y="-20" width="60" height="7" rx="1.5" fill="#6b4630" stroke="#2a1d1b" />
+        <rect x="-26" y="-13" width="52" height="9" fill="#4a2f1f" stroke="#2a1d1b" />
+        <path d="M-16 -20l3 -4h20l3 4z" fill="#ebdfc4" /><path d="M-9 -22q6 -2 10 0t6 0" stroke="#9e1b24" strokeWidth=".8" fill="none" strokeDasharray="2 1.5" />
+        <path d="M19 -20v-8" stroke="#ebdfc4" strokeWidth="2.4" /><path className="chama" d="M19 -35q3 4 0 6q-3 -2 0 -6z" fill="var(--ambar)" />
+        <path d="M-25 -20v-4h5v4z" fill="#1b1012" /><path d="M-22 -24l5 -9" stroke="#ece3d0" strokeWidth="1" />
+      </g>
       {Array.from({ length: 9 }, (_, i) => <g key={i} ref={(el) => { flechas.current[i] = el; }} display="none" pointerEvents="none">{i < 6 ? <path d="M-14 0H8M8 0l-5 -3M8 0l-5 3M-14 0l-3 -3M-14 0l-3 3" stroke="#e8e4c8" strokeWidth="1.4" fill="none" /> : <><path d="M-2 -1.6L8 0L-2 1.6Z" fill="#d8dde4" /><path d="M-8 0H-2M-2 -3V3" stroke="#5a3a26" strokeWidth="2" /></>}</g>)}
       {Array.from({ length: 8 }, (_, i) => <g key={i} ref={(el) => { faiscas.current[i] = el; }} display="none" pointerEvents="none"><path d="M-6 0H6M0 -6V6M-4 -4L4 4M-4 4L4 -4" stroke="#ffd36b" strokeWidth="1.2" /></g>)}
       <rect className="tinte" width={VIEW.w} height={VIEW.h} pointerEvents="none" />

@@ -125,14 +125,14 @@ function Treino() {
       </g>
       {/* the climbing tower, across the hall from the leap */}
       <g transform={`translate(${ESCALADA_X[1]} ${SALTO_Y})`}>
-        <rect x="-34" y={-TORRE_ALT - 8} width="68" height={TORRE_ALT + 8} fill={pedra(38)} stroke={pedra(85)} strokeWidth="2.5" />
+        <rect x="-34" y={-TORRE_ALT} width="68" height={TORRE_ALT} fill={pedra(38)} stroke={pedra(85)} strokeWidth="2.5" />
         {Array.from({ length: 18 }, (_, i) => <rect key={i} x={-28 + (i % 3) * 22 + (Math.floor(i / 3) % 2) * 7} y={-8 - Math.floor(i / 3) * 10} width="7" height="3" rx="1.5" fill={pedra(95)} />)}
-        <rect x="-39" y={-TORRE_ALT - 13} width="78" height="5" fill={pedra(90)} />
-        {[-34, -10, 14, 28].map((cx) => <rect key={cx} x={cx} y={-TORRE_ALT - 20} width="8" height="7" fill={pedra(70)} />)}
+        {/* walkway on top: its surface is exactly where the climbers stand */}
+        <rect x="-55" y={-TORRE_ALT} width="94" height="5" fill={pedra(90)} />
         {/* the rope, tied to an arm jutting from the top, with knots and a coil on the floor */}
         <g transform={`translate(${CORDA_X - ESCALADA_X[1]} 0)`}>
-          <path d={`M0 ${-TORRE_ALT - 10}H18`} stroke={pedra(90)} strokeWidth="4" />
-          <path d={`M0 ${-TORRE_ALT - 10}V0`} stroke="#c9a56a" strokeWidth="2.4" />
+          <circle cy={-TORRE_ALT} r="3" fill={pedra(95)} />
+          <path d={`M0 ${-TORRE_ALT}V0`} stroke="#c9a56a" strokeWidth="2.4" />
           {[1, 2, 3, 4, 5].map((n) => <circle key={n} cy={-n * 11} r="2.2" fill="#a8864f" />)}
           <ellipse cy="1" rx="7" ry="2.5" fill="none" stroke="#c9a56a" strokeWidth="1.8" />
         </g>
@@ -168,7 +168,7 @@ function Portaria() {
       <Barril x={118} y={y + h - 10} /><Barril x={138} y={y + h - 6} /><Barril x={128} y={y + h - 24} />
       <Caixote x={186} y={y + h - 8} l={24} /><Caixote x={210} y={y + h - 8} l={18} />
       <Braseiro x={262} y={y + h - 8} i={0} />
-      <Braseiro x={538} y={y + h - 8} i={2} />
+      <Braseiro x={572} y={y + h - 8} i={2} />
       <Caixote x={600} y={y + h - 8} l={18} /><Caixote x={624} y={y + h - 8} l={24} />
       <Escudo x={680} y={y + 34} />
       <Barril x={730} y={y + h - 8} /><Barril x={750} y={y + h - 12} />

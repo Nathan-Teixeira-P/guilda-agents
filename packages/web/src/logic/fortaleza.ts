@@ -5,6 +5,7 @@ import type { Atividade } from "./escritorio.ts";
 export interface SalaProjeto { nome: string; x: number; y: number; w: number; h: number }
 export interface Lugar { x: number; y: number; projeto?: string }
 export const PORTARIA = { x: 16, y: 182, w: 768, h: 68 } as const;
+export const REGENTE_X = 522; // beside the gate, never on the way through it
 export const TREINO = { x: 16, y: 256, w: 768, h: 208 } as const;
 
 export function posicionar(atividade: Record<string, Atividade | undefined>): { salas: SalaProjeto[]; lugar: Record<string, Lugar> } {
@@ -29,7 +30,7 @@ export function posicionar(atividade: Record<string, Atividade | undefined>): { 
   const porLinha = 12;
   parados.forEach((t, k) => { lugar[t] = { x: TREINO.x + (TREINO.w / porLinha) * ((k % porLinha) + 0.5), y: TREINO.y + 122 + Math.floor(k / porLinha) * 52 }; });
   const regente = atividade["orchestrator"];
-  lugar["orchestrator"] = { x: 400, y: PORTARIA.y + 52, ...(regente?.ativo && regente.projeto ? { projeto: regente.projeto } : {}) };
+  lugar["orchestrator"] = { x: REGENTE_X, y: PORTARIA.y + 57, ...(regente?.ativo && regente.projeto ? { projeto: regente.projeto } : {}) };
   return { salas, lugar };
 }
 
