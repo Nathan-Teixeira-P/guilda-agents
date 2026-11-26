@@ -23,6 +23,7 @@ export interface M {
   blocos?: { nome: string; resumo?: string; specs: number[]; depende: number[] }[];
   specsFeitas?: number[];
   blocosSel?: number[];
+  notaBuild?: string;
   loops?: Record<string, number>;
   local?: { localTasks: number; fallbacks: number; tokensSaved: number };
 }

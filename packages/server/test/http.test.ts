@@ -542,3 +542,27 @@ describe("delivery blocks", () => {
     expect(rodadas[1]).toContain("002-b.spec.md");
   });
 });
+
+describe("auto-resume after the plan limit", () => {
+  it("resumes phase 2 by itself once the time passes", async () => {
+    const rodadas: string[] = [];
+    const limitado = (o: RunOpts) => {
+      if (o.phase === 1) return Promise.resolve({ mission: transition(o.mission, "aguardando-aprovacao", { now: clock }) }) as never;
+      rodadas.push(o.prompt);
+      const mission = rodadas.length === 1
+        ? { ...transition(o.mission, "pausada", { now: clock, reason: "limite do plano" }), retomarEm: 1 }
+        : transition(o.mission, "concluida", { now: clock });
+      return Promise.resolve({ mission }) as never;
+    };
+    mkdirSync(join(project, ".claude"), { recursive: true });
+    srv = createServer({ runner: (o) => { if (o.phase === 1) { const d = join(o.missionsDir, o.mission.id, "out/prd"); mkdirSync(d, { recursive: true }); writeFileSync(join(d, "a.prd.md"), "# A"); } return limitado(o); }, store: createStore(missionsDir), clock, projects: { proj: project }, host: "127.0.0.1", retomadaMs: 25 });
+    port = await srv.listen(0);
+    const id = await create();
+    await until(id, "aguardando-aprovacao");
+    await call("POST", `/missions/${id}/approve`, {});
+    await until(id, "concluida");
+    expect(rodadas).toHaveLength(2);
+    expect(rodadas[1]).toContain("usage is available again");
+    expect((await call("GET", `/missions/${id}`)).json.mission.retomarEm).toBeUndefined();
+  });
+});

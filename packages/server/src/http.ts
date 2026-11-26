@@ -15,7 +15,7 @@ import { normalizar, PROJECT_ID, analisarProjeto, analisarSubida, resolverProjet
 import { checkPasta, cloneRepo, type CloneResult } from "./clone.ts";
 import { gravarEvento, lerEventos } from "./event-log.ts";
 import { promoteDraft } from "./promote.ts";
-import { promptFase1, promptFase2, promptContinuacao, instrucaoRelatorio, instrucaoResumo, instrucaoExecucao } from "./prompt.ts";
+import { promptFase1, promptFase2, promptContinuacao, instrucaoRelatorio, instrucaoResumo, instrucaoExecucao, comentarioBuild } from "./prompt.ts";
 import { promptFase1Redacao, promptFase2Redacao, promptSugestoes } from "./prompt-redacao.ts";
 import { createProjectsStore, lerRetomada, type ProjectsStore } from "./projects-store.ts";
 import { goTestScript, type RunOpts, type RunOutcome } from "./runner.ts";
@@ -48,6 +48,7 @@ export interface ServerOpts {
   clone?: (o: { origem: string; id: string; workspacesDir: string }) => Promise<CloneResult>; // injectable in tests
   usageAuto?: Pick<AutoDeps, "every" | "tickMs">; // injectable timer for tests
   usage?: UsageSource; // plan usage (spec 017); default is in memory with no way to consult
+  retomadaMs?: number; // how often to look for missions whose plan limit was released
   agent?: string;
   heartbeatMs?: number; // SSE `: ping` period (default 25 s); injectable for tests
   redacao?: RedacaoStore; // article workspace (spec 027); without it /redacao answers 501
@@ -303,6 +304,41 @@ export function createServer(o: ServerOpts) {
       ...(m.kind === "relatorio" ? { relatorio: true } : {}),
     });
   };
+
+  const LIBEROU = "The run stopped because the Claude plan usage limit was reached; usage is available again. Continue exactly where you stopped: do not redo or re-audit finished work, only check what was left half-done.";
+
+  /** Resumes a paused or recolhida mission. `automatico`: the hub itself, after the plan's usage was released. */
+  function retomar(m: Mission, resposta?: string, automatico = false): Mission {
+    // pausada remembers its phase; parada (recolhida) goes back to phase 2 only if it was sealed and has a session
+    const fase2 = m.stage === "pausada" ? m.pausedFrom === "executando" : isApproved(store.dirOf(m.id)) && !!m.sessionId;
+    // fail closed: phase 2 only with a valid seal (re-checked by the runner too)
+    if (fase2 && !isApproved(store.dirOf(m.id))) throw new HttpError(409, "approval gate not open: cannot resume execution");
+    const { stopReason: _s, retomarEm: _r, ...limpa } = m;
+    const depois = (x: Mission) => (automatico ? x : intervene(x)); // rework counters survive an automatic resume
+    if (fase2) {
+      const next = depois(transition(limpa as Mission, "executando", { now: clock, approved: true }));
+      save(next);
+      const comentario = automatico ? LIBEROU : String(m["pauseReason"] ?? "").startsWith("build necessário") ? comentarioBuild(resposta) : resposta;
+      launch(next, 2, promptFase2({ ...fase2Input(next), retomada: !automatico, ...(comentario ? { comentario } : {}) }));
+      return next;
+    }
+    // phase 1 resumes like adjust: fresh session carrying the comment, auditing what was already drafted
+    const { sessionId: _drop, ...rest } = transition(limpa as Mission, "planejando", { now: clock });
+    const next = depois(rest as Mission);
+    save(next);
+    launch(next, 1, prompt1(next, resposta, true));
+    return next;
+  }
+
+  /** Missions stopped by the plan limit go back by themselves, one at a time. The time is in mission.json, so a hub restart keeps it. */
+  function retomarLiberadas() {
+    if (running.size) return;
+    const agora = clock().getTime() / 1000;
+    const m = store.list().find((x) => x.stage === "pausada" && typeof x["retomarEm"] === "number" && (x["retomarEm"] as number) <= agora);
+    if (!m) return;
+    try { retomar(m, undefined, true); } catch (e) { console.error(`auto-resume ${m.id}: ${e instanceof Error ? e.message : String(e)}`); }
+  }
+  let retomador: NodeJS.Timeout | undefined;
 
   // ---- request plumbing ----
   const send = (res: ServerResponse, status: number, body: unknown) => {
@@ -845,25 +881,7 @@ export function createServer(o: ServerOpts) {
       const b = await json(req, Resume);
       const m = mustGet(id);
       if ((m.stage !== "pausada" && m.stage !== "parada") || running.has(id)) throw new HttpError(409, `cannot resume in stage ${m.stage}`);
-      // pausada remembers its phase; parada (recolhida) goes back to phase 2 only if it was sealed and has a session
-      const fase2 = m.stage === "pausada" ? m.pausedFrom === "executando" : isApproved(store.dirOf(id)) && !!m.sessionId;
-      const { stopReason: _s, ...limpa } = m;
-      if (fase2) {
-        // fail closed: phase 2 only with a valid seal (re-checked by the runner too)
-        if (!isApproved(store.dirOf(id))) throw new HttpError(409, "approval gate not open: cannot resume execution");
-        const next = intervene(transition(limpa as Mission, "executando", { now: clock, approved: true }));
-        save(next);
-        const construiu = String(m["pauseReason"] ?? "").startsWith("build necessário") ? "The user ran the requested build and pressed continue: verify what was waiting for it, then go on. Do not ask for the same build again." : "";
-        const comentario = [construiu, b.comment].filter(Boolean).join("\n");
-        launch(next, 2, promptFase2({ ...fase2Input(next), retomada: true, ...(comentario ? { comentario } : {}) }));
-        return send(res, 202, { mission: next });
-      }
-      // phase 1 resumes like adjust: fresh session carrying the comment, auditing what was already drafted
-      const { sessionId: _drop, ...rest } = transition(limpa as Mission, "planejando", { now: clock });
-      const next = intervene(rest as Mission);
-      save(next);
-      launch(next, 1, prompt1(next, b.comment, true));
-      return send(res, 202, { mission: next });
+      return send(res, 202, { mission: retomar(m, b.comment) });
     }
     if (action === "continue") {
       const b = await json(req, Continuar);
@@ -935,10 +953,13 @@ export function createServer(o: ServerOpts) {
       nt?.start();
       nt?.sistema("Salão no ar", "O servidor do salão foi iniciado.");
       port = (server.address() as { port: number }).port;
+      retomador = setInterval(retomarLiberadas, o.retomadaMs ?? 60_000);
+      retomador.unref();
       return port;
     },
     async close() {
       auto.stop();
+      clearInterval(retomador);
       nt?.close();
       if (watcher) clearInterval(watcher);
       watcher = undefined;

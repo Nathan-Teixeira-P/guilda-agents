@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NOTES_PROMPT_LIMIT, promptFase1, promptFase2, instrucaoExecucao } from "../src/prompt.ts";
+import { NOTES_PROMPT_LIMIT, promptFase1, promptFase2, instrucaoExecucao, comentarioBuild } from "../src/prompt.ts";
 
 const base = { demanda: "add a CLI", stagingDir: "/m/m-1/out", projetoPath: "/p/proj" };
 
@@ -70,4 +70,12 @@ it("execution instructions require the security gate and unrun checks in the han
   const p = instrucaoExecucao([]);
   expect(p).toContain("call security-reviewer after the tester passes");
   expect(p).toContain("NOT run or verified");
+});
+
+it("a build error pasted on resume is fixed and rebuilt before anything else", () => {
+  const p = comentarioBuild("undefined: Foo");
+  expect(p).toContain("did NOT succeed");
+  expect(p).toContain("undefined: Foo");
+  expect(p).not.toContain("Do not ask for the same build again");
+  expect(comentarioBuild()).toContain("Do not ask for the same build again");
 });

@@ -173,6 +173,7 @@ function pauseReason(stopped: string, pt: string): string | undefined {
   if (stopped.startsWith("breaker: ")) return `disjuntor: ${pt}`;
   if (stopped.startsWith("budget: ")) return `teto de uso: ${pt}`;
   if (stopped.startsWith("build: ")) return `build necessário: ${pt}`;
+  if (stopped.startsWith("limit: ")) return `limite do plano: ${pt}`;
   if (stopped.startsWith("plan: ")) return `teto de uso do plano: ${pt}`;
   return undefined;
 }
@@ -210,6 +211,8 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
   };
   let to2 = "";
   let fezTrabalho = false; // phase 2 that never edited a file nor called a subagent did not execute anything
+  let notaBuild: string | undefined; // what the agent said when asking for a build: it is killed right after, so this is all the user gets
+  let retomarEm: number | undefined; // epoch seconds: set when the plan's usage ran out, the hub resumes by itself then
   const finish = (stopped?: string, pt?: string): RunOutcome => {
     const failed = stopped !== undefined || out.lastResult?.isError === true;
     // breaker and budget stops pause (user can resume); user stop, errors and exits are terminal
@@ -220,7 +223,8 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
     const to = reason ? "pausada" : failed ? "parada" : o.phase === 1 ? "aguardando-aprovacao" : "concluida";
     to2 = to;
     const next = m.stage === to ? m : transition(m, to, { now: o.now, ...(reason ? { reason } : {}) });
-    let comLocal = next;
+    const { retomarEm: _antigo, notaBuild: _nota, ...semHora } = next; // a stale time must never resume a later pause
+    let comLocal: Mission = to === "pausada" ? { ...semHora, ...(retomarEm ? { retomarEm } : {}), ...(notaBuild ? { notaBuild } : {}) } : semHora;
     if (statsAntes && o.hubDir && chamadasLocal > 0) {
       const d = readStats(o.hubDir);
       for (let i = 0; i < d.calls.local - statsAntes.calls.local; i++) comLocal = recordLocal(comLocal, { via: "local", tokensSaved: i === 0 ? d.tokensSavedEstimate - statsAntes.tokensSavedEstimate : 0 });
@@ -294,7 +298,10 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
       if (e.agent === MAIN_AGENT) for (const x of e.text.matchAll(/^VOLTA\s+([\w.-]+)\s*$/gm)) bs = recordLoop(bs, x[1]!, o.now);
       // builds are the user's job: the mission waits until they run it and press continue
       const build = e.agent === MAIN_AGENT ? /^BUILD\s+(.{1,300})$/m.exec(e.text)?.[1]?.trim() : undefined;
-      if (build) stop(`build: ${build}`, `rode no projeto e clique em Retomar: ${build}`);
+      if (build) {
+        notaBuild = e.text.replace(/^BUILD\s.*$/gm, "").trim().slice(0, 1500) || undefined;
+        stop(`build: ${build}`, `rode no projeto e clique em Retomar: ${build}`);
+      }
       // a spec that passed the tester makes the chain limit start over (once per spec; the rework limit still applies)
       if (e.agent === MAIN_AGENT) for (const x of e.text.matchAll(/^OK\s+([\w.-]+)\s*$/gm)) if (!specsOk.has(x[1]!)) { specsOk.add(x[1]!); out.specsOk!.push(x[1]!); bs = { ...bs, handoffs: 0 }; }
     } else if (e.kind === "usage") {
@@ -363,6 +370,16 @@ export async function runPhase(o: RunOpts, deps: { spawn?: SpawnFn } = {}): Prom
   // Merge per-agent tokens (own usage events, subagent totals take precedence when larger).
   for (const { agent, total } of tokensByMsg.values()) out.tokensByAgent[agent] = (out.tokensByAgent[agent] ?? 0) + total;
   if (!stopped && budget.exhausted) stopped = "budget: CLI reported the spend cap was hit", stoppedPt = "a CLI informou que o teto de gasto foi atingido";
+  const texto = out.lastResult?.isError ? out.lastResult.text : "";
+  const semUso = /hit your .{0,30}limit|usage limit reached/i.test(texto) || (code !== 0 && out.rateLimit?.status === "rejected");
+  if (!stopped && semUso) {
+    const agora = o.now().getTime() / 1000;
+    const janela = /week/i.test(texto) ? out.rateLimit?.sevenDay : out.rateLimit?.fiveHour;
+    // unknown or past reset time: try again in 30 min; one extra minute so the window is really open
+    retomarEm = janela && janela.resetsAt > agora ? janela.resetsAt + 60 : Math.ceil(agora) + 1800;
+    stopped = "limit: plan usage";
+    stoppedPt = `a missão volta sozinha em ${new Date(retomarEm * 1000).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`;
+  }
   if (!stopped && code !== 0) stopped = `exit code ${code}`;
   return finish(stopped, stoppedPt);
 }

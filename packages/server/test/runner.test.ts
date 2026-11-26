@@ -195,11 +195,12 @@ describe("runPhase", () => {
 
   it("a `BUILD <command>` line from the main agent pauses until the user builds", async () => {
     const f = join(root, "build.jsonl");
-    writeFileSync(f, `${JSON.stringify({ type: "assistant", message: { id: "b", role: "assistant", content: [{ type: "text", text: "BUILD npm run build" }] } })}\n${readFileSync(fixture("stream-basic"), "utf8")}`);
+    writeFileSync(f, `${JSON.stringify({ type: "assistant", message: { id: "b", role: "assistant", content: [{ type: "text", text: "Falta gerar o código.\nBUILD npm run build" }] } })}\n${readFileSync(fixture("stream-basic"), "utf8")}`);
     const spawn: SpawnFn = (_f, _a, o) => realSpawn(process.execPath, [fake, f, "hang"], { cwd: o.cwd, stdio: ["ignore", "pipe", "pipe"] });
     const out = await runPhase({ ...base(), phase: 1, mission: m0("planejando") }, { spawn });
     expect(out.mission.stage).toBe("pausada");
     expect(out.mission["pauseReason"]).toBe("build necessário: rode no projeto e clique em Retomar: npm run build");
+    expect(out.mission["notaBuild"]).toBe("Falta gerar o código.");
   });
 
   it("trips on persisted loops without an injected breaker", async () => {
@@ -248,5 +249,21 @@ describe("runPhase", () => {
     const out = await runPhase({ ...base(), phase: 1, mission: m0("planejando") }, { spawn: sp });
     expect(out.unknownLines).toBeGreaterThanOrEqual(1);
     expect(out.mission.stage).toBe("aguardando-aprovacao");
+  });
+});
+
+describe("plan limit", () => {
+  it("pauses with the time the window reopens", async () => {
+    const f = join(root, "limit.jsonl");
+    const agora = Math.floor(new Date().getTime() / 1000);
+    writeFileSync(f, [
+      { type: "rate_limit_event", rate_limit_info: { status: "rejected", unifiedWindows: { five_hour: { utilization: 1, resetsAt: 4102444800, status: "rejected" } } } },
+      { type: "result", subtype: "success", is_error: true, result: "You've hit your session limit · resets 3pm", total_cost_usd: 0 },
+    ].map((x) => JSON.stringify(x)).join("\n") + "\n");
+    const spawn: SpawnFn = (_f, _a, o) => realSpawn(process.execPath, [fake, f, ""], { cwd: o.cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const out = await runPhase({ ...base(), phase: 1, mission: m0("planejando") }, { spawn });
+    expect(out.mission.stage).toBe("pausada");
+    expect(out.mission["pauseReason"]).toMatch(/^limite do plano: a missão volta sozinha/);
+    expect(out.mission["retomarEm"]).toBeGreaterThan(agora);
   });
 });

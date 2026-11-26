@@ -27,13 +27,16 @@ export function PausaPanel({ m, onDone }: { m: M; onDone: () => void }) {
   }
 
   const parada = m.stage === "parada";
+  const build = !parada && !!m.pauseReason?.startsWith("build necessário");
   return (
     <section className="panel aviso field" aria-labelledby="pz-t">
       <h2 id="pz-t">{parada ? "Missão recolhida" : "Missão pausada: aguarda você"}</h2>
       <p className="warn" role="alert"><strong>Motivo:</strong> {(parada ? m.stopReason : m.pauseReason) ?? "não informado"}</p>
+      {m.notaBuild && <p style={{ whiteSpace: "pre-wrap" }}><strong>O agente diz:</strong> {m.notaBuild}</p>}
       <p className="hint">Ao retomar, o agente primeiro confere tudo o que já foi feito (plano, arquivos e código do projeto), aponta o que ficou faltando ou precisa mudar e só então continua {parada ? "de onde a missão parou" : m.pausedFrom === "executando" ? "a execução (o selo já foi dado)" : "o reconhecimento do plano"}; o disjuntor zera.</p>
       <div className="field" style={{ marginTop: "var(--e-3)" }}>
-        <label htmlFor="pz-c">Sua resposta (opcional)</label>
+        <label htmlFor="pz-c">{build ? "O build deu erro? Cole o erro aqui (vazio = passou)" : "Sua resposta (opcional)"}</label>
+        {build && <p className="hint">Com erro colado, o agente corrige primeiro e pede o build de novo. O campo aceita 20 mil caracteres: se o log for maior, cole só as linhas de erro.</p>}
         <textarea id="pz-c" value={comentario} onChange={(e) => setComentario(e.target.value)} maxLength={20000} style={{ minHeight: 96 }} />
       </div>
       {erro && <p className="err" role="alert">{erro}</p>}

@@ -41,11 +41,14 @@ export function promptFase1(i: Fase1Input): string {
   return lines.join("\n");
 }
 
+const EXPLIQUE = "In the same message, above any `BUILD` line, explain to the user in pt-BR (up to 6 lines) what to run and why; after a failed build, also the cause and what you changed (or that no code changed). It is all the user will see.";
+
 /** Appended to phase 2: spec-to-spec handoff and the exact Bash allow-list, so coders do not burn turns on re-exploring or on denied commands. */
 export const instrucaoExecucao = (comandos: string[], goTest?: string) =>
   [
     "After each spec's coder, call tester: it runs the checks for what changed and compares with the spec's acceptance criteria. Only a pass moves to the next spec; anything failing or missing goes back to the coder first. Failures in code outside the spec do not block: list them as pending.",
     "Security gate: if a spec's changes touch user input, auth, permissions, personal data, secrets, shell, network or dependencies, call security-reviewer after the tester passes, with the changed file paths. A high or critical finding goes back to the coder. If unsure, call it.",
+    EXPLIQUE,
     "When a spec passes (tester, plus security-reviewer when the gate applies), write on its own line exactly `OK <spec-number>` (never otherwise).",
     ...(goTest ? [
       "Builds are the user's job: no agent compiles anything (no go build, go test or the test script) before the user has built. Finish writing the specs you can first, then ask once for the whole block: write on its own line exactly `BUILD <command>` and stop there. For Go use `BUILD CGO_ENABLED=1 go test -p 1 -run '^$' ./pkg/<dir>/ ...` (the touched packages).",
@@ -56,6 +59,12 @@ export const instrucaoExecucao = (comandos: string[], goTest?: string) =>
       ? `Tell every coder and tester: the only project commands allowed are ${comandos.map((c) => `\`${c}\``).join(", ")}, plus read-only \`git status|diff|log\`${goTest ? " and the Go test script above" : ""}. Run each alone, written exactly like that. Anything else is denied: do not retry it or try variants; report it as pending for the user.`
       : "No project commands are configured: agents have no test Bash. Report unverified work as pending for the user.",
   ].join("\n");
+
+/** Resume from a `BUILD` pause. The user's reply may carry the build errors: those come before anything else. */
+export const comentarioBuild = (resposta?: string) =>
+  resposta
+    ? `The user ran the requested build and replied below. If the reply shows a build error or failure, the build did NOT succeed: before anything else have the coder fix its cause (give it the error text), then write \`BUILD <command>\` again on its own line and stop, so the user rebuilds. If the cause is a step that did not run (code generation, migration) and not wrong code, change no code and ask for that step alone. ${EXPLIQUE} Do not test, mark \`OK\` or start other specs until a build succeeds. If the reply reports no error, verify what was waiting for the build and go on.\nUser reply:\n${resposta}`
+    : "The user ran the requested build, reported no error and pressed continue: verify what was waiting for it, then go on. Do not ask for the same build again.";
 
 /** Appended to phase 2: the agent leaves a short, structured wrap-up that the UI shows when the contract is fulfilled. */
 export const instrucaoRelatorio = "Report-only mission: do NOT modify the project's code or files. Delegate to no coder: only have the `scribe` write the wrap-up.";
