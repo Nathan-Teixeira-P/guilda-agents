@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { corDe } from "../roster.ts";
-import { derivarPainel, recadosNovos } from "../logic/escritorio.ts";
+import { derivarPainel } from "../logic/escritorio.ts";
 import { exibido } from "../logic/frescor.ts";
 import { FICHA } from "../logic/guilda.ts";
 import { useNow } from "../store.ts";
@@ -12,7 +12,7 @@ import { criarMundo, type Mundo } from "./Mundo3D.ts";
 
 interface Props { live: Live; selecionado?: string | undefined; onSelecionar: (t: string | undefined) => void; onFalha: (motivo: string) => void }
 
-/** The 3D hall. Same simulation as the 2D scene (logic/escritorio.ts); three.js lives only in this lazy chunk. React renders the overlays; the canvas is driven imperatively. */
+/** The 3D hideout. Same plan as the 2D scene (logic/fortaleza.ts); three.js lives only in this lazy chunk. React renders the overlays; the canvas is driven imperatively. */
 export default function Cena3D({ live, selecionado, onSelecionar, onFalha }: Props) {
   const painel = useMemo(() => derivarPainel(live.missions, live.events, (id) => live.projects.find((p) => p.id === id)?.nome ?? id), [live.missions, live.events, live.projects]);
   const linhas = useMemo(() => linhasDe(painel.atividade, painel.tokens), [painel]);
@@ -25,7 +25,6 @@ export default function Cena3D({ live, selecionado, onSelecionar, onFalha }: Pro
   const [hover, setHover] = useState<string>();
   const cb = useRef({ selecionado, onSelecionar, onFalha });
   cb.current = { selecionado, onSelecionar, onFalha };
-  const vistos = useRef<Record<string, number>>(undefined as never);
   const local = live.local?.emUso?.agent;
 
   useEffect(() => {
@@ -49,12 +48,6 @@ export default function Cena3D({ live, selecionado, onSelecionar, onFalha }: Pro
     mundo.current?.atualizar({ atividade: painel.atividade, selecionado, uso: u, local, aoVivo: painel.aoVivo });
     mundo.current?.pedirQuadro();
   }, [painel, selecionado, u.estado === "ok" ? u : u.motivo, local, hover, now]);
-  useEffect(() => {
-    const { contagem, novos } = recadosNovos(vistos.current, live.events);
-    vistos.current = contagem;
-    for (const r of novos.slice(0, 6)) mundo.current?.recado(r);
-  }, [live.events]);
-
   const ref = useCallback((id: string) => (el: HTMLElement | null) => { if (el) bolhas.current.set(id, el); else bolhas.current.delete(id); }, []);
   const mostradas = linhas.filter((l) => l.estado !== "ocioso" || local === l.tecnico || selecionado === l.tecnico || hover === l.tecnico);
 
@@ -69,7 +62,7 @@ export default function Cena3D({ live, selecionado, onSelecionar, onFalha }: Pro
 
   return (
     <div className="cena3d">
-      <div ref={host} className="cena3d-host" tabIndex={0} role="group" aria-label="Escritório da guilda em 3D. Setas esquerda e direita percorrem os membros; Esc limpa a seleção. A lista Quem faz o quê traz a mesma informação." onKeyDown={teclas}>
+      <div ref={host} className="cena3d-host" tabIndex={0} role="group" aria-label="Fortaleza da guilda em 3D: contratos ao fundo, portaria no meio, sala de treinamento à frente. Setas esquerda e direita percorrem os membros; Esc limpa a seleção. A lista Quem faz o quê traz a mesma informação." onKeyDown={teclas}>
         <div className="cena3d-bolhas" aria-hidden="true">
           {mostradas.map((l) => {
             const marcado = selecionado === l.tecnico || hover === l.tecnico;

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { agruparPorGrupo, FICHA } from "../src/logic/guilda.ts";
+import { agruparPorGrupo, FICHA, salasDe } from "../src/logic/guilda.ts";
 import { ROSTER } from "../src/roster.ts";
 
 describe("guilda", () => {
@@ -17,4 +17,17 @@ describe("guilda", () => {
       expect(FICHA[m.tecnico]!.modelo, m.tecnico).toBe(/^model:\s*(\w+)/m.exec(md)![1]);
     }
   });
+});
+
+it("agents leave the waiting room only while they work on a running mission", () => {
+  const m = { id: "m1", project: "p", stage: "executando", updatedAt: "" } as never;
+  const r = salasDe([m], { m1: [
+    { kind: "subagent-started", agentId: "a", subagentType: "coder" },
+    { kind: "subagent-started", agentId: "b", subagentType: "tester" },
+    { kind: "subagent-finished", agentId: "b" },
+  ] });
+  expect(r.salas[0]!.postos.map((x) => x.tipo)).toEqual(["orchestrator", "coder"]);
+  expect(r.espera).toContain("tester");
+  expect(r.espera).not.toContain("coder");
+  expect(salasDe([{ id: "m1", project: "p", stage: "concluida", updatedAt: "" } as never], {}).salas).toEqual([]);
 });

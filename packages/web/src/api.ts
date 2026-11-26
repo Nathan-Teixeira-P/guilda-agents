@@ -1,3 +1,4 @@
+import type { Conversa } from "../../server/src/transcript.ts";
 import type { M } from "./logic/stages.ts";
 import type { LocalConfig, LocalStats, LocalStatus } from "./logic/local.ts";
 import type { Uso } from "./logic/emblem.ts";
@@ -70,6 +71,7 @@ export const api = {
   subida: (id: string) => call<{ passos: { passo: number; comando: string; motivo: string }[] }>("GET", `/projects/${encodeURIComponent(id)}/subida`),
   sugestoes: (id: string) => call<{ sugestoes: { comando: string; motivo: string }[]; mensagem?: string }>("GET", `/projects/${encodeURIComponent(id)}/sugestoes`),
   setComandos: (id: string, comandos: string[]) => call<{ projeto: Projeto }>("PATCH", `/projects/${encodeURIComponent(id)}/comandos`, { comandos }),
+  terminal: (id: string) => call<{ conversas: Conversa[] }>("GET", `/missions/${encodeURIComponent(id)}/terminal`),
   eventos: (id: string) => call<{ eventos: unknown[] }>("GET", `/missions/${encodeURIComponent(id)}/eventos`),
   mission: (id: string) => call<Detalhe>("GET", `/missions/${encodeURIComponent(id)}`),
   approve: (id: string, blocos?: number[]) => call<{ mission: M }>("POST", `/missions/${encodeURIComponent(id)}/approve`, blocos ? { blocos } : {}),

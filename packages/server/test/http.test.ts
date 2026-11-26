@@ -533,13 +533,48 @@ describe("delivery blocks", () => {
     expect((await call("POST", `/missions/${id}/approve`, { blocos: [1] })).status).toBe(202);
     await until(id, "aguardando-aprovacao");
     expect(rodadas[0]).toContain("001-a.spec.md");
+    expect(rodadas[0]).toContain("- Block 1: specs 1");
     expect(rodadas[0]!.split("Security gate")[0]).not.toContain("002-b.spec.md");
     expect((await call("GET", `/missions/${id}`)).json.mission.specsFeitas).toEqual([1]);
     expect(isApproved(join(missionsDir, id))).toBe(false); // new blocks need a new seal
+    // a bug report between blocks runs only that request and comes back to approval
+    const sess = createStore(missionsDir);
+    sess.save({ ...sess.get(id)!, sessionId: "s-1" });
+    ok = [];
+    expect((await call("POST", `/missions/${id}/continue`, { comment: "bug na tela" })).status).toBe(202);
+    await until(id, "aguardando-aprovacao");
+    expect(rodadas[1]).toContain("bug na tela");
+    expect(rodadas[1]).not.toContain(".spec.md");
     ok = ["002"];
     expect((await call("POST", `/missions/${id}/approve`, {})).status).toBe(202);
     await until(id, "concluida");
-    expect(rodadas[1]).toContain("002-b.spec.md");
+    expect(rodadas[2]).toContain("002-b.spec.md");
+  });
+});
+
+describe("adjustment during execution", () => {
+  it("interrupts and resumes the same mission with the request", async () => {
+    const rodadas: string[] = [];
+    const lento = (o: RunOpts) => {
+      if (o.phase === 1) {
+        mkdirSync(join(o.missionsDir, o.mission.id, "out", "specs"), { recursive: true });
+        writeFileSync(join(o.missionsDir, o.mission.id, "out", "specs/001-a.spec.md"), "---\ndependencies: []\n---");
+        return Promise.resolve({ mission: transition(o.mission, "aguardando-aprovacao", { now: clock }) }) as never;
+      }
+      rodadas.push(o.prompt);
+      if (rodadas.length > 1) return Promise.resolve({ mission: transition(o.mission, "concluida", { now: clock }), specsOk: ["001"] }) as never;
+      return new Promise((ok) => o.signal!.addEventListener("abort", () => ok({ mission: transition(o.mission, "pausada", { now: clock, reason: "pausado" }) }))) as never;
+    };
+    srv = createServer({ runner: lento, store: createStore(missionsDir), clock, host: "127.0.0.1", projects: { proj: project } });
+    port = await srv.listen(0);
+    const id = await create();
+    await until(id, "aguardando-aprovacao");
+    await call("POST", `/missions/${id}/approve`, {});
+    const r = await call("POST", `/missions/${id}/continue`, { comment: "troque a cor" });
+    expect(r.status).toBe(202);
+    await until(id, "concluida");
+    expect(rodadas[1]).toContain("troque a cor");
+    expect(rodadas[1]).not.toContain("audit the current state");
   });
 });
 

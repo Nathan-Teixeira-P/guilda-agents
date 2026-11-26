@@ -15,6 +15,7 @@ const LINKS = [
   { to: "/", label: "Salão" },
   { to: "/escritorio", label: "Escritório" },
   { to: "/quadro", label: "Quadro" },
+  { to: "/orquestra", label: "Orquestra" },
   { to: "/arsenal", label: "Arsenal" },
   { to: "/guilda", label: "Guilda" },
   { to: "/projetos", label: "Projetos" },
@@ -84,6 +85,7 @@ export function Shell({ route, live, notif, pendentes, children }: { route: Rout
       <nav className="bottom" aria-label="Principal (celular)">
         <a href="#/" {...cur("/")}>Salão</a>
         <a href="#/quadro" {...cur("/quadro")}>Quadro</a>
+        <a href="#/orquestra" {...cur("/orquestra")}>Orquestra</a>
         <a className="mais" href="#/nova" {...cur("/nova")} aria-label="Nova missão">+ Nova</a>
         <a href="#/arsenal" {...cur("/arsenal")}>Arsenal</a>
         <a href="#/projetos" {...cur("/projetos")}>Projetos</a>

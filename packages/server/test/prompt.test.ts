@@ -68,7 +68,8 @@ describe("instrucaoExecucao", () => {
 
 it("execution instructions require the security gate and unrun checks in the handoff", () => {
   const p = instrucaoExecucao([]);
-  expect(p).toContain("call security-reviewer after the tester passes");
+  expect(p).toContain("also call security-reviewer");
+  expect(p).toContain("SendMessage");
   expect(p).toContain("NOT run or verified");
 });
 
@@ -78,4 +79,8 @@ it("a build error pasted on resume is fixed and rebuilt before anything else", (
   expect(p).toContain("undefined: Foo");
   expect(p).not.toContain("Do not ask for the same build again");
   expect(comentarioBuild()).toContain("Do not ask for the same build again");
+});
+
+it("lists the blocks of the run so each gets its own team", () => {
+  expect(promptFase2({ specs: ["/p/001-a.spec.md"], projetoPath: "/p", blocos: ["- Block 2: specs 1"] })).toContain("- Block 2: specs 1");
 });

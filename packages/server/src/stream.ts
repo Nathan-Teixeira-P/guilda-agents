@@ -16,7 +16,7 @@ export type StreamEvent =
   | { kind: "init"; sessionId: string; model?: string; permissionMode?: string }
   | { kind: "usage"; messageId: string; agent: string; model?: string; tokens: Tokens }
   | { kind: "text"; agent: string; text: string }
-  | { kind: "tool"; agent: string; name: string; command?: string }
+  | { kind: "tool"; agent: string; name: string; command?: string; alvo?: string }
   | { kind: "denied"; agent: string; tool: string }
   | { kind: "subagent-started"; agentId: string; toolUseId?: string; subagentType?: string }
   | { kind: "subagent-progress"; agentId: string; subagentType?: string; totalTokens?: number }
@@ -149,8 +149,11 @@ export function parseLine(line: string): StreamEvent[] {
       });
     }
     for (const c of m.content) {
-      if (c.type === "tool_use" && c.name) out.push({ kind: "tool", agent, name: c.name, ...(c.name === "Bash" && typeof (c.input as { command?: unknown } | null)?.command === "string" ? { command: (c.input as { command: string }).command } : {}) });
-      else if (c.type === "text" && c.text) out.push({ kind: "text", agent, text: c.text });
+      if (c.type === "tool_use" && c.name) {
+        const i = (c.input ?? {}) as Record<string, unknown>;
+        const alvo = [i["file_path"], i["pattern"], i["description"]].find((v): v is string => typeof v === "string" && v !== "");
+        out.push({ kind: "tool", agent, name: c.name, ...(c.name === "Bash" ? (typeof i["command"] === "string" ? { command: i["command"] } : {}) : alvo ? { alvo: alvo.slice(0, 200) } : {}) });
+      } else if (c.type === "text" && c.text) out.push({ kind: "text", agent, text: c.text });
     }
     return out;
   }

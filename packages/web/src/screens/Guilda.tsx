@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Avatar, INSIGNIA } from "../guild/Avatar.tsx";
 import { emUsoAgora, podeUsarLocal } from "../logic/local.ts";
 import type { Live } from "../store.ts";
+import { Assassino } from "../guild/Assassino.tsx";
+import { Salas } from "../ui/Salas.tsx";
 import { agruparPorGrupo } from "../logic/guilda.ts";
 
 const SECOES = agruparPorGrupo();
@@ -15,6 +17,7 @@ export function Guilda({ live }: { live: Live }) {
         <h1>Guilda</h1>
         <button type="button" className="btn" aria-pressed={costas} onClick={() => setCostas((v) => !v)}>{costas ? "Ver de frente" : "Ver de costas"}</button>
       </div>
+      <Salas live={live} />
       <p className="muted">Todos os membros da guilda, por ofício. Cada manto traz a insígnia do grupo no peito e o emblema NTP nas costas.</p>
       {SECOES.map(({ grupo, membros }) => (
         <section key={grupo.id} aria-labelledby={`g-${grupo.id}`}>
@@ -26,7 +29,9 @@ export function Guilda({ live }: { live: Live }) {
             {membros.map((m) => (
               <li key={m.tecnico} className={`gu-card${emUsoAgora(live.local, m.tecnico) ? " local-uso" : ""}`} style={{ borderTopColor: grupo.cor }}>
                 <div className="gu-fig">
-                  <Avatar agente={m.tecnico} tamanho={140} vista={costas ? "costas" : "frente"} />
+                  {costas
+                    ? <Avatar agente={m.tecnico} tamanho={140} vista="costas" />
+                    : <svg viewBox="-22 -62 44 66" width="120" height="180" role="img" aria-label={`${m.codinome}, com o traje da irmandade`}><ellipse cy="1" rx="13" ry="2.6" fill="#000" opacity=".35" /><Assassino agente={m.tecnico} /></svg>}
                   <span className="gu-mini"><Avatar agente={m.tecnico} tamanho={36} vista={costas ? "frente" : "costas"} oculto /></span>
                 </div>
                 <h3>{m.codinome}</h3>

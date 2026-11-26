@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { anguloRitmo, arcoUso, contagem, dePlanta, escolherVista, ESCALA, lerVista, paraMundo } from "../src/logic/cena3d.ts";
-import { montarPlanta, VIEW } from "../src/logic/escritorio.ts";
+import { VIEW } from "../src/logic/escritorio.ts";
 
 describe("paraMundo", () => {
   it("centres the plan on the origin and scales", () => {
@@ -8,10 +8,9 @@ describe("paraMundo", () => {
     expect(paraMundo(0, 0)).toEqual({ x: -400 * ESCALA, z: -240 * ESCALA });
     expect(paraMundo(800, 480).x).toBeCloseTo(20);
   });
-  it("round-trips every waypoint and keeps room order (north = smaller z)", () => {
-    const p = montarPlanta();
-    for (const n of Object.values(p.nos)) { const w = paraMundo(n.x, n.y); const b = dePlanta(w.x, w.z); expect(b.x).toBeCloseTo(n.x); expect(b.y).toBeCloseTo(n.y); }
-    expect(paraMundo(0, p.nos["s:planner"]!.y).z).toBeLessThan(paraMundo(0, p.nos["s:coder"]!.y).z);
+  it("round-trips points and keeps room order (north = smaller z)", () => {
+    for (const [x, y] of [[16, 16], [400, 234], [784, 464]] as const) { const w = paraMundo(x, y); const b = dePlanta(w.x, w.z); expect(b.x).toBeCloseTo(x); expect(b.y).toBeCloseTo(y); }
+    expect(paraMundo(0, 96).z).toBeLessThan(paraMundo(0, 380).z);
   });
 });
 

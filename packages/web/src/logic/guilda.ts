@@ -1,4 +1,6 @@
 import { ROSTER, type Grupo, type Membro } from "../roster.ts";
+import { janelasDe, type Ev, type Janela } from "./events.ts";
+import type { M } from "./stages.ts";
 
 export type Modelo = "haiku" | "sonnet" | "opus";
 export interface Ficha { modelo: Modelo; funcao: string }
@@ -43,4 +45,26 @@ export function agruparPorGrupo(roster: readonly Membro[] = ROSTER): SecaoGrupo[
     if (s) s.membros.push(c); else out.push({ grupo: m.grupo, membros: [c] });
   }
   return out;
+}
+
+export const trabalhando = (m: Pick<M, "stage">) => m.stage === "planejando" || m.stage === "executando";
+export interface Posto extends Janela { missionId: string }
+export interface Sala { project: string; postos: Posto[] }
+
+/** One room per project with a running mission: its Regente plus whoever has not finished yet. Everyone else is in the waiting room. */
+export function salasDe(missions: readonly M[], events: Record<string, readonly Ev[]>): { salas: Sala[]; espera: string[] } {
+  const salas = new Map<string, Sala>();
+  const fora = new Set<string>();
+  for (const m of missions.filter(trabalhando)) {
+    const sala = salas.get(m.project) ?? { project: m.project, postos: [] };
+    for (const j of janelasDe(events[m.id] ?? [])) {
+      const regente = j.id === "main";
+      if (!regente && j.estado !== "ativo") continue;
+      const tipo = regente ? "orchestrator" : j.tipo;
+      fora.add(tipo);
+      sala.postos.push({ ...j, tipo, estado: "ativo", missionId: m.id });
+    }
+    salas.set(m.project, sala);
+  }
+  return { salas: [...salas.values()], espera: ROSTER.map((r) => r.tecnico).filter((t) => !fora.has(t)) };
 }

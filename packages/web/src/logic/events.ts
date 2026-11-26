@@ -3,9 +3,9 @@ import type { M } from "./stages.ts";
 
 /** Subset of StreamEvent (packages/server/src/stream.ts) that the UI reads. */
 export type Ev =
-  | { kind: "tool"; agent: string; name: string }
+  | { kind: "tool"; agent: string; name: string; command?: string; alvo?: string }
   | { kind: "text"; agent: string; text: string }
-  | { kind: "subagent-started"; agentId: string; subagentType?: string }
+  | { kind: "subagent-started"; agentId: string; toolUseId?: string; subagentType?: string }
   | { kind: "subagent-finished"; agentId: string; status?: string }
   | { kind: "result"; isError: boolean; text: string; modelUsage: Record<string, number>; permissionDenials: unknown[] }
   | { kind: "usage"; messageId: string; agent: string; tokens: { input: number; output: number; cacheRead: number; cacheCreation: number } }
@@ -111,6 +111,57 @@ export function membrosDe(events: readonly Ev[]): MembroVisto[] {
       const m = by.get(e.agentId);
       if (m) { m.estado = e.status !== undefined && e.status !== "completed" ? "falhou" : "concluido"; delete m.ferramenta; }
     }
+  }
+  return [...by.values()];
+}
+
+export interface Janela extends MembroVisto { linhas: string[] }
+
+/** One "terminal window" per agent: the Regente first, then the others in order of arrival, each with its latest actions. */
+export function janelasDe(events: readonly Ev[], max = 40): Janela[] {
+  const main: Janela = { id: "main", tipo: "main", estado: "ativo", linhas: [] };
+  const by = new Map<string, Janela>([["main", main]]);
+  for (const j of membrosDe(events)) by.set(j.id, { ...j, linhas: [] });
+  const alias = new Map<string, string>(); // some events name the agent by its tool-use id
+  for (const e of events) {
+    if (e.kind === "subagent-started" && e.toolUseId) alias.set(e.toolUseId, e.agentId);
+    if (e.kind === "result") main.estado = e.isError ? "falhou" : "concluido";
+    if ((e.kind === "tool" && e.agent === "main") || e.kind === "subagent-started") main.estado = "ativo"; // a run has one `result` per turn
+    if (e.kind !== "tool") continue;
+    const j = by.get(alias.get(e.agent) ?? e.agent);
+    if (!j) continue;
+    j.linhas.push(e.command ? `$ ${e.command}` : `▸ ${e.name}${e.alvo ? ` ${e.alvo}` : ""}`);
+    if (j.linhas.length > max) j.linhas.shift();
+  }
+  return [...by.values()];
+}
+
+/** Caps the history without losing totals: only tool lines are dropped (oldest first); usage keeps one entry per message. */
+export function aparar(events: readonly Ev[], maxTools = 500): Ev[] {
+  const msg = new Map<string, number>(); // messageId -> position in `out`
+  const out: Ev[] = [];
+  for (const e of events) {
+    const i = e.kind === "usage" ? msg.get(e.messageId) : undefined;
+    if (i !== undefined) { out[i] = e; continue; }
+    if (e.kind === "usage") msg.set(e.messageId, out.length);
+    out.push(e);
+  }
+  let sobra = out.filter((e) => e.kind === "tool").length - maxTools;
+  return sobra > 0 ? out.filter((e) => e.kind !== "tool" || sobra-- <= 0) : out;
+}
+
+export interface Papel { tipo: string; estado: MembroVisto["estado"]; linhas: string[]; tokens: number; vezes: number }
+
+/** One node per role on the canvas: every instance of an agent type adds to the same window. */
+export function porPapel(janelas: readonly Janela[], tokens: Record<string, number>, max = 60): Papel[] {
+  const by = new Map<string, Papel>();
+  for (const j of janelas) {
+    const p = by.get(j.tipo) ?? { tipo: j.tipo, estado: j.estado, linhas: [], tokens: 0, vezes: 0 };
+    p.estado = p.estado === "ativo" ? "ativo" : j.estado;
+    p.linhas = [...p.linhas, ...j.linhas].slice(-max);
+    p.tokens += tokens[j.id] ?? 0;
+    p.vezes++;
+    by.set(j.tipo, p);
   }
   return [...by.values()];
 }

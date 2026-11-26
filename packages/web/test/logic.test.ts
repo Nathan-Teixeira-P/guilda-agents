@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { groupByStage, STAGE_ORDER, type M } from "../src/logic/stages.ts";
 import { consumoPp, faixa, formatDesde, formatTempoRestante } from "../src/logic/time.ts";
-import { cronicaDe, gateState, ondeMaisGastou, ehComando, contarTrocas, type Ev } from "../src/logic/events.ts";
+import { cronicaDe, gateState, ondeMaisGastou, ehComando, contarTrocas, type Ev, janelasDe, aparar, porPapel } from "../src/logic/events.ts";
 
 const m = (id: string, stage: M["stage"], updatedAt = "2026-01-01T00:00:00Z"): M => ({ id, project: "p", stage, costUsd: 0, createdAt: updatedAt, updatedAt });
 
@@ -111,4 +111,24 @@ describe("background commands are not agents", () => {
     expect(contarTrocas([evs[1]!, ok])).toBe(0);
     expect(contarTrocas([ok, evs[1]!, ok])).toBe(1);
   });
+});
+
+it("janelasDe puts each action in its agent's window", () => {
+  const j = janelasDe([
+    { kind: "subagent-started", agentId: "t1", toolUseId: "u1", subagentType: "coder" },
+    { kind: "tool", agent: "t1", name: "Bash", command: "npm test" },
+    { kind: "tool", agent: "u1", name: "Read", alvo: "a.ts" },
+  ]);
+  expect(j.map((x) => x.linhas)).toEqual([[], ["$ npm test", "▸ Read a.ts"]]);
+});
+
+it("aparar drops only old tool lines, so token totals survive", () => {
+  const uso = (messageId: string, input: number) => ({ kind: "usage" as const, messageId, agent: "main", tokens: { input, output: 0, cacheRead: 0, cacheCreation: 0 } });
+  const tool = (name: string) => ({ kind: "tool" as const, agent: "main", name });
+  expect(aparar([uso("a", 1), tool("x"), uso("a", 5), tool("y"), uso("b", 2), tool("z")], 2)).toEqual([uso("a", 5), tool("y"), uso("b", 2), tool("z")]);
+});
+
+it("porPapel merges the instances of a role into one window", () => {
+  const j = (id: string, estado: "ativo" | "concluido", linha: string) => ({ id, tipo: "coder", estado, linhas: [linha] });
+  expect(porPapel([j("a", "ativo", "1"), j("b", "concluido", "2")], { a: 3, b: 4 })).toEqual([{ tipo: "coder", estado: "ativo", linhas: ["1", "2"], tokens: 7, vezes: 2 }]);
 });

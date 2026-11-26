@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { closeSync, constants, copyFileSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { MAX_CHAINED_HANDOFFS, MAX_LOOPS_PER_SPEC } from "@lab/core/src/breaker.ts";
@@ -14,6 +15,7 @@ import { dependenciasFaltando, montarBlocos, blocoFeito, type Bloco } from "@lab
 import { normalizar, PROJECT_ID, analisarProjeto, analisarSubida, resolverProjeto, validarClickupUrl, validarComando, validarOrigem, type LeitorProjeto, type Projeto } from "@lab/core/src/projects.ts";
 import { checkPasta, cloneRepo, type CloneResult } from "./clone.ts";
 import { gravarEvento, lerEventos } from "./event-log.ts";
+import { lerConversas } from "./transcript.ts";
 import { promoteDraft } from "./promote.ts";
 import { promptFase1, promptFase2, promptContinuacao, instrucaoRelatorio, instrucaoResumo, instrucaoExecucao, comentarioBuild } from "./prompt.ts";
 import { promptFase1Redacao, promptFase2Redacao, promptSugestoes } from "./prompt-redacao.ts";
@@ -257,8 +259,9 @@ export function createServer(o: ServerOpts) {
         } else if (phase === 2 && cur.stage === "concluida") {
           const r = lerResumo(resumoPath(m));
           if (r) cur = { ...cur, resumo: r };
+          delete cur["ajustando"];
           // blocks left unsealed: close the gate and go back to the user's approval
-          if (!continuacao && blocosDe(cur).some((b) => !blocoFeito(b, feitasDe(cur)))) {
+          if (blocosDe(cur).some((b) => !blocoFeito(b, feitasDe(cur)))) {
             rmSync(join(store.dirOf(m.id), GATE_FILE), { force: true });
             cur = { ...transition(cur, "aguardando-aprovacao", { now: clock }), blocosSel: undefined };
           }
@@ -289,7 +292,9 @@ export function createServer(o: ServerOpts) {
     const escolhidas = new Set(blocosDe(m).filter((_, i) => !sel || sel.includes(i + 1)).flatMap((b) => b.specs));
     const todas = specsOf(m);
     const specs = blocosDe(m).length ? todas.filter((p) => escolhidas.has(numeroDe(p)) && !feitasDe(m).includes(numeroDe(p))) : todas;
-    return { specs, projetoPath: projectPath(m) ?? "", adiadas: todas.length - specs.length, ...(o.hubDir ? { hubDir: o.hubDir } : {}) };
+    const rodada = new Set(specs.map(numeroDe));
+    const blocos = blocosDe(m).flatMap((b, i) => { const ns = b.specs.filter((n) => rodada.has(n)); return ns.length ? [`- Block ${i + 1}: specs ${ns.join(", ")}`] : []; });
+    return { specs, blocos, projetoPath: projectPath(m) ?? "", adiadas: todas.length - specs.length, ...(o.hubDir ? { hubDir: o.hubDir } : {}) };
   };
 
   const prompt1 = (m: Mission, comment?: string, retomada = false) => {
@@ -308,7 +313,7 @@ export function createServer(o: ServerOpts) {
   const LIBEROU = "The run stopped because the Claude plan usage limit was reached; usage is available again. Continue exactly where you stopped: do not redo or re-audit finished work, only check what was left half-done.";
 
   /** Resumes a paused or recolhida mission. `automatico`: the hub itself, after the plan's usage was released. */
-  function retomar(m: Mission, resposta?: string, automatico = false): Mission {
+  function retomar(m: Mission, resposta?: string, automatico = false, auditar = !automatico): Mission {
     // pausada remembers its phase; parada (recolhida) goes back to phase 2 only if it was sealed and has a session
     const fase2 = m.stage === "pausada" ? m.pausedFrom === "executando" : isApproved(store.dirOf(m.id)) && !!m.sessionId;
     // fail closed: phase 2 only with a valid seal (re-checked by the runner too)
@@ -319,7 +324,9 @@ export function createServer(o: ServerOpts) {
       const next = depois(transition(limpa as Mission, "executando", { now: clock, approved: true }));
       save(next);
       const comentario = automatico ? LIBEROU : String(m["pauseReason"] ?? "").startsWith("build necessário") ? comentarioBuild(resposta) : resposta;
-      launch(next, 2, promptFase2({ ...fase2Input(next), retomada: !automatico, ...(comentario ? { comentario } : {}) }));
+      // an interrupted follow-up goes back to its own request, never to the unsealed specs
+      if (typeof next["ajustando"] === "string") launch(next, 2, `${promptContinuacao(next["ajustando"], projectPath(next) ?? "")}\nThat run was interrupted: check what was left half-done and finish it.${comentario ? `\nUser comment: ${comentario}` : ""}`, true);
+      else launch(next, 2, promptFase2({ ...fase2Input(next), retomada: auditar, ...(comentario ? { comentario } : {}) }));
       return next;
     }
     // phase 1 resumes like adjust: fresh session carrying the comment, auditing what was already drafted
@@ -819,6 +826,11 @@ export function createServer(o: ServerOpts) {
     }
     const historico = /^\/missions\/([^/]+)\/eventos$/.exec(path);
     if (historico && method === "GET") return send(res, 200, { eventos: lerEventos(store.dirOf(mustGet(historico[1]!).id)) });
+    const terminal = /^\/missions\/([^/]+)\/terminal$/.exec(path);
+    if (terminal && method === "GET") {
+      const m = mustGet(terminal[1]!);
+      return send(res, 200, { conversas: m.sessionId ? lerConversas(join(homedir(), ".claude", "projects"), m.sessionId) : [] });
+    }
     const hit = /^\/missions\/([^/]+)(?:\/(approve|adjust|resume|continue|stop|pause))?$/.exec(path);
     if (!hit) throw new HttpError(404, "not found");
     const [, id = "", action] = hit;
@@ -885,11 +897,21 @@ export function createServer(o: ServerOpts) {
     }
     if (action === "continue") {
       const b = await json(req, Continuar);
-      const m = mustGet(id);
-      if (m.stage !== "concluida" || running.has(id) || m.kind === "redacao") throw new HttpError(409, `cannot continue in stage ${m.stage}`);
+      let m = mustGet(id);
+      const run = running.get(id);
+      if (m.stage === "executando" && run && m.kind !== "redacao") {
+        // adjustment during execution: interrupt and resume the same session with it
+        run.ac.abort("pause");
+        await run.done;
+        m = mustGet(id);
+        if (m.stage === "pausada" && m.pausedFrom === "executando") return send(res, 202, { mission: retomar(m, `The user interrupted the run with this adjustment. Check what the interrupted agent left half-done, apply the adjustment first, then continue:\n${b.comment}`, false, false) });
+      }
+      const entreBlocos = m.stage === "aguardando-aprovacao" && feitasDe(m).length > 0;
+      if ((m.stage !== "concluida" && !entreBlocos) || running.has(id) || m.kind === "redacao") throw new HttpError(409, `cannot continue in stage ${m.stage}`);
+      if (entreBlocos && m.sessionId) writeFileSync(join(store.dirOf(id), GATE_FILE), JSON.stringify({ approved: true, approvedAt: clock().toISOString() })); // the request itself authorizes this change
       if (!isApproved(store.dirOf(id)) || !m.sessionId) throw new HttpError(409, "no sealed session to continue");
       const { resumo: _old, ...limpa } = m;
-      const next = intervene(transition(limpa as Mission, "executando", { now: clock, approved: true }));
+      const next = intervene(transition({ ...limpa, ajustando: b.comment } as Mission, "executando", { now: clock, approved: true }));
       save(next);
       launch(next, 2, promptContinuacao(b.comment, projectPath(m) ?? ""), true);
       return send(res, 202, { mission: next });

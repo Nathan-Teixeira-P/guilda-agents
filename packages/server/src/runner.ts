@@ -133,7 +133,7 @@ export function buildArgs(o: RunOpts, sessionId: string): string[] {
     if (go) local.push(`Bash(${go}:*)`);
     const git = ["status", "diff", "log"].flatMap((c) => [`git ${c}`, rtkForm(`git ${c}`)]).filter(Boolean).map((c) => `Bash(${c}:*)`); // read-only: lets a resumed run audit what was already done
     args.push("--add-dir", resumoDir); // the only place outside the project phase 2 may write: the wrap-up card
-    args.push("--allowedTools", "Read", "Glob", "Grep", rulePath(project), rulePath(resumoDir), ...tests, ...local, ...git);
+    args.push("--allowedTools", "Read", "Glob", "Grep", "SendMessage", rulePath(project), rulePath(resumoDir), ...tests, ...local, ...git);
     args.push("--disallowedTools", ...["git commit", "git push", "gh", "curl", "wget", "ssh", "scp"].map((c) => `Bash(${c}:*)`), "WebFetch", ...deny);
   }
   return args;

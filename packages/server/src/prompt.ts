@@ -46,15 +46,17 @@ const EXPLIQUE = "In the same message, above any `BUILD` line, explain to the us
 /** Appended to phase 2: spec-to-spec handoff and the exact Bash allow-list, so coders do not burn turns on re-exploring or on denied commands. */
 export const instrucaoExecucao = (comandos: string[], goTest?: string) =>
   [
-    "After each spec's coder, call tester: it runs the checks for what changed and compares with the spec's acceptance criteria. Only a pass moves to the next spec; anything failing or missing goes back to the coder first. Failures in code outside the spec do not block: list them as pending.",
-    "Security gate: if a spec's changes touch user input, auth, permissions, personal data, secrets, shell, network or dependencies, call security-reviewer after the tester passes, with the changed file paths. A high or critical finding goes back to the coder. If unsure, call it.",
+    "Team per block (a block is listed above; without blocks, the whole run is one): create each role (coder, tester, reviewer) with Agent only once, then give it the next spec or a fix with SendMessage to its agent id, so it keeps what it already read. After SendMessage end your turn and wait for the reply: never assume it, never start other work meanwhile. Message only agents you created in this mission. At a new block, or after 4 specs with the same agent, create a new one.",
+    "Messages carry only what is new: spec path, changed files with line ranges, the failure text. Ask every coder to report changed files with line ranges, decisions, commands run with results, and what was NOT run or verified. Never treat unrun checks as passed.",
+    "Shared memory: do not call explorer for each spec; every new agent reads .claude/handoff/map.md (if it exists) and .claude/handoff/notes.md first and searches only for what they do not cover. Before retiring a team, have the coder append to notes.md at most 15 lines: block, what changed and where, decisions, what is pending, whether the block was reviewed.",
+    "After each spec's coder, the tester: it runs the checks for what changed and compares with the spec's acceptance criteria. Only a pass moves to the next spec; anything failing or missing goes back to the coder first. Failures in code outside the spec do not block: list them as pending.",
+    "Review once per block, not per spec: when its specs pass (and before asking for a BUILD at its end), call reviewer with the changed files and line ranges. Security gate: if the block touches user input, auth, permissions, personal data, secrets, shell, network or dependencies, also call security-reviewer. A high or critical finding goes back to the coder. If unsure, call it. A finished block that notes.md does not show as reviewed is reviewed first.",
     EXPLIQUE,
-    "When a spec passes (tester, plus security-reviewer when the gate applies), write on its own line exactly `OK <spec-number>` (never otherwise).",
+    "When a spec passes the tester, write on its own line exactly `OK <spec-number>` (never otherwise).",
     ...(goTest ? [
       "Builds are the user's job: no agent compiles anything (no go build, go test or the test script) before the user has built. Finish writing the specs you can first, then ask once for the whole block: write on its own line exactly `BUILD <command>` and stop there. For Go use `BUILD CGO_ENABLED=1 go test -p 1 -run '^$' ./pkg/<dir>/ ...` (the touched packages).",
       `Only after the user confirms the build: tester runs \`${goTest} ./pkg/<dir>/ [-run Name] [-v]\`. If it is killed (exit 124, 137, 143) or times out, do not retry: report it as pending.`,
     ] : ["If something only works after a build, never build: write on its own line exactly `BUILD <command>` and stop; the user runs it and resumes."]),
-    "Handoff: do not call explorer for each spec; tell each agent to read .claude/handoff/map.md first, if it exists, and search only for what it does not cover. Give each coder its spec path plus the previous coder's short report (what was created, decisions made, commands run with their result, what was NOT run or verified; up to 10 lines). Never treat unrun checks as passed.",
     comandos.length
       ? `Tell every coder and tester: the only project commands allowed are ${comandos.map((c) => `\`${c}\``).join(", ")}, plus read-only \`git status|diff|log\`${goTest ? " and the Go test script above" : ""}. Run each alone, written exactly like that. Anything else is denied: do not retry it or try variants; report it as pending for the user.`
       : "No project commands are configured: agents have no test Bash. Report unverified work as pending for the user.",
@@ -73,13 +75,14 @@ export const instrucaoResumo = (path: string) =>
 
 /** Follow-up on a concluded mission: same session, new request from the user. */
 export const promptContinuacao = (comentario: string, projetoPath: string) =>
-  [`The mission was concluded, and the user now asks for a follow-up in the same project (${projetoPath}). Use what you already know from this session; do not redo finished work. Run it through the usual agent flow, never implementing yourself: classify it (small: explorer → coder → tester → reviewer, as in phase 2; use security-reviewer when the diff touches input, auth, secrets, shell, network or dependencies); if it is large, ambiguous or a product decision, stop and ask the user instead of guessing.`, "", "New request:", comentario, "", "Never commit or push. Pass file paths to agents, never contents. Subagents cannot create subagents."].join("\n");
+  [`The user now asks for a follow-up (change or bug) on work already done in the same project (${projetoPath}). Use what you already know from this session; do not redo finished work. An agent you already created that knows the area is reused with SendMessage (then end your turn and wait), not created again. Run it through the usual agent flow, never implementing yourself: classify it (small: explorer → coder → tester → reviewer, as in phase 2; use security-reviewer when the diff touches input, auth, secrets, shell, network or dependencies); if it is large, ambiguous or a product decision, stop and ask the user instead of guessing.`, "", "New request:", comentario, "", "Never commit or push. Pass file paths to agents, never contents. Subagents cannot create subagents."].join("\n");
 
 export interface Fase2Input {
   specs: string[]; // absolute spec paths
   projetoPath: string;
   comentario?: string; // user comment when resuming a paused run
   retomada?: boolean; // resuming: audit the project before continuing
+  blocos?: string[]; // one line per block in this run: where each team starts and ends
   adiadas?: number; // specs of this mission left out of this run (other blocks, or already done)
   hubDir?: string; // absolute hub folder: tells agents where the log compactor lives (spec 036)
 }
@@ -89,6 +92,7 @@ export function promptFase2(i: Fase2Input): string {
     ...(i.specs.length
       ? [`Approved. Phase 2 (execution) in ${i.projetoPath}. Implement these specs in order, one at a time:`, ...i.specs.map((s) => `- ${s}`)]
       : [`Approved. Phase 2 (execution) in ${i.projetoPath}. There are no specs: implement the approved plan at ${i.projetoPath}/.claude/handoff/plan.md.`]),
+    ...(i.blocos?.length ? ["Blocks in this run:", ...i.blocos] : []),
     ...(i.adiadas ? [`Only the specs listed above: ${i.adiadas} other(s) are done or belong to blocks not sealed yet. Do not implement them.`] : []),
     ...(i.retomada ? ["", "RESUMING. Before implementing anything, audit the current state: read the specs/plan, run `git status`, `git diff --stat` and `git log -5` in the project, read the changed files, and run the test commands. For each spec decide: done, partial, missing, or needs change (something done is wrong, outdated, or lost). Report that audit in 10 lines max, then continue only with what is partial, missing or needs change. Do not redo what is done and correct."] : []),
     ...(i.comentario ? ["", "The run was paused; the user resumed it with this comment:", i.comentario, ""] : []),

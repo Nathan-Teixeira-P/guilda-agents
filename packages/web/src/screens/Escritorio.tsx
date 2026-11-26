@@ -2,7 +2,9 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Cena, fmtTokens, linhasDe, rotuloEstado, type Linha } from "../guild/Cena.tsx";
 import { escolherVista, lerVista, type Vista } from "../logic/cena3d.ts";
 import { derivarPainel } from "../logic/escritorio.ts";
-import { FICHA } from "../logic/guilda.ts";
+import { FICHA, salasDe, trabalhando } from "../logic/guilda.ts";
+import { Janela } from "../ui/Salas.tsx";
+import { useEventos } from "../ui/useEventos.ts";
 import { Avatar } from "../guild/Avatar.tsx";
 import { membro } from "../roster.ts";
 import type { Live } from "../store.ts";
@@ -21,6 +23,9 @@ export function Escritorio({ live, lista = true }: { live: Live; lista?: boolean
   const painel = useMemo(() => derivarPainel(live.missions, live.events, (id) => live.projects.find((p) => p.id === id)?.nome ?? id), [live.missions, live.events, live.projects]);
   const linhas = useMemo(() => linhasDe(painel.atividade, painel.tokens), [painel]);
   const [sel, setSel] = useState<string>();
+  useEventos(live, live.missions.filter(trabalhando).map((m) => m.id));
+  // the selected member's terminal, while it is at work
+  const posto = salasDe(live.missions, live.events).salas.flatMap((s) => s.postos).find((p) => p.tipo === sel);
   useEffect(() => {
     if (!sel) return;
     const f = (e: KeyboardEvent) => { if (e.key === "Escape") setSel(undefined); };
@@ -54,6 +59,7 @@ export function Escritorio({ live, lista = true }: { live: Live; lista?: boolean
           ? <Suspense fallback={<Cena live={live} selecionado={sel} onSelecionar={setSel} />}><Cena3D live={live} selecionado={sel} onSelecionar={setSel} onFalha={setFalha} /></Suspense>
           : <Cena live={live} selecionado={sel} onSelecionar={setSel} />}
       </div>
+      {posto && <Janela key={`${posto.missionId}:${posto.id}`} p={posto} />}
       {card && <Ficha l={card} onFechar={() => setSel(undefined)} />}
       {lista && <Lista linhas={linhas} sel={sel} onSel={setSel} />}
     </section>
@@ -109,7 +115,7 @@ export function EscritorioTela({ live }: { live: Live }) {
   return (
     <>
       <div className="sec"><h1>Escritório</h1></div>
-      <p className="muted">A guilda por dentro: quem está em campo senta à sua mesa, os demais circulam pelo salão. Clique (ou use Tab e Enter) em um membro para ver a ficha.</p>
+      <p className="muted">A guilda por dentro: quem está sem contrato treina; quem é chamado vai para a sala do projeto. Clique (ou use Tab e Enter) em um membro para ver a ficha e, se estiver em campo, o terminal dele.</p>
       <Escritorio live={live} />
     </>
   );

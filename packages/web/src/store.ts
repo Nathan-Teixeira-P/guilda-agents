@@ -1,4 +1,4 @@
-import { ehComando } from "./logic/events.ts";
+import { aparar, ehComando } from "./logic/events.ts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Projeto } from "./api.ts";
 import type { M } from "./logic/stages.ts";
@@ -34,7 +34,6 @@ export interface Live {
 }
 
 const BATCH_MS = 250;
-const MAX_EVENTS = 500;
 
 /** Missions and projects, kept fresh by SSE. Events are buffered and applied at most once per 250 ms. */
 export function useLive(): Live {
@@ -88,7 +87,7 @@ export function useLive(): Live {
       if (evs.length > 0) {
         setEvents((cur) => {
           const next = { ...cur };
-          for (const { id, e } of evs) next[id] = [...(next[id] ?? []), e].slice(-MAX_EVENTS);
+          for (const { id, e } of evs) next[id] = aparar([...(next[id] ?? []), e]);
           return next;
         });
       }
@@ -177,8 +176,8 @@ export function useLive(): Live {
     const r = await api.eventos(id);
     if (!r.ok || r.data.eventos.length === 0) return;
     const comandos = new Set<string>();
-    const lista = (r.data.eventos as Ev[]).filter((e) => !ehComando(e, comandos)).slice(-MAX_EVENTS);
-    setEvents((cur) => ({ ...cur, [id]: lista }));
+    const lista = (r.data.eventos as Ev[]).filter((e) => !ehComando(e, comandos));
+    setEvents((cur) => ({ ...cur, [id]: aparar(lista) }));
   }, []);
 
   return { carregarEventos, missions, usage, auto, definirAuto, local, localStats, recarregarLocal, consultarUso, projects, artigos, loading, error, up, retryInSec, lastOkAt, warnings, events, missionWarnings, reload: () => void reload(), retryNow: () => conn.current?.retryNow() };

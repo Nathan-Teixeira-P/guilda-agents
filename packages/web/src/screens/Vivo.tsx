@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.ts";
-import { contarTrocas, cronicaDe, membrosDe, tokensVivos } from "../logic/events.ts";
+import { contarTrocas, cronicaDe, janelasDe, membrosDe, porPapel, tokensVivos } from "../logic/events.ts";
 import { erroDeAcao } from "../logic/erros.ts";
 import { MAX_HANDOFFS, MAX_LOOPS } from "../logic/fuse.ts";
 import { tokensDe, textoPlano } from "../logic/arsenal.ts";
 import type { M } from "../logic/stages.ts";
 import type { Live } from "../store.ts";
 import { Membro } from "../ui/Avatar.tsx";
+import { useConversas } from "../ui/Terminal.tsx";
+import { Canvas } from "../ui/Canvas.tsx";
+import { FalarComGuilda } from "../ui/AjusteBox.tsx";
 import { ConfirmDialog } from "../ui/ConfirmDialog.tsx";
 import { Pavio } from "../ui/Pavio.tsx";
 import { PausaPanel } from "../ui/PausaPanel.tsx";
@@ -21,6 +24,7 @@ export function Vivo({ m, live, onChange }: { m: M; live: Live; onChange: () => 
   const linhas = useMemo(() => cronicaDe(eventos), [eventos]);
   const tokens = useMemo(() => tokensVivos(eventos), [eventos]);
   const membros = useMemo(() => membrosDe(eventos), [eventos]);
+  const janelas = useMemo(() => janelasDe(eventos), [eventos]);
   const trocas = contarTrocas(eventos);
   const { carregarEventos } = live;
   useEffect(() => { void carregarEventos(m.id); }, [carregarEventos, m.id, live.up]); // replay after opening or reconnecting
@@ -59,6 +63,9 @@ export function Vivo({ m, live, onChange }: { m: M; live: Live; onChange: () => 
   const tokensTotal = tokens.total > 0 ? tokens.total : tokensDe(m);
   const porAgente = tokens.total > 0 ? tokens.porAgente : (m.tokensByAgent ?? {});
   const ativa = m.stage === "planejando" || m.stage === "executando";
+  const conversas = useConversas(m.id, ativa);
+  // a stopped run never reports the end of whoever was working
+  const rotulo = (e: keyof typeof ESTADO) => (!ativa && e === "ativo" ? "interrompido" : ESTADO[e]);
 
   return (
     <>
@@ -75,15 +82,18 @@ export function Vivo({ m, live, onChange }: { m: M; live: Live; onChange: () => 
       {erro && <p className="err field" role="alert">{erro}</p>}
       <div className="vivo">
         <section aria-labelledby="cr-t" className="cronica">
-          <h2 id="cr-t">Crônica</h2>
+          <h2 id="cr-t">Mapa da guilda</h2>
+          {eventos.length > 0 && <Canvas conversas={conversas} papeis={porPapel(janelas, tokens.porAgente)} rotulo={rotulo} vivo={ativa} fala={<FalarComGuilda m={m} onFeito={onChange} />} />}
           <p className="sr-only" role="status">{anuncio}</p>
           {linhas.length === 0 ? (
             <p className="hint">{ativa ? "Aguardando os primeiros movimentos da guilda…" : "Nenhum evento registrado para esta missão."}</p>
           ) : (
+            <details><summary>Histórico ({linhas.length})</summary>
             <ol className="log" ref={caixa} tabIndex={0} aria-label="Eventos da missão" onScroll={(e) => { const c = e.currentTarget; noFim.current = c.scrollTop + c.clientHeight >= c.scrollHeight - 40; }}>
               {linhas.map((l, i) => <li key={i} className={l.tone === "erro" ? "err" : ""}>{l.text}</li>)}
               {!live.up && <li className="warn">— mensageiro perdido, reconectando —</li>}
             </ol>
+            </details>
           )}
         </section>
         <aside aria-label="Consumo e disjuntor" className="lateral">
@@ -107,7 +117,7 @@ export function Vivo({ m, live, onChange }: { m: M; live: Live; onChange: () => 
             <h2 id="mb-t">Membros convocados</h2>
             <p className="hint">Em campo no projeto <strong>{live.projects.find((p) => p.id === m.project)?.nome ?? m.project}</strong></p>
             {membros.length === 0 ? <p className="hint">Ninguém convocado ainda.</p> : (
-              <ul className="lista-simples">{membros.map((x) => <li key={x.id}><Membro agente={x.tipo || "?"} tamanho={24} estado={x.estado} /> <span className={x.estado === "falhou" ? "err" : "muted"}>{ESTADO[x.estado]}{x.ferramenta ? ` · ${x.ferramenta}` : ""}</span><span className="sr-only"> {membro(x.tipo).grupo.nome}</span></li>)}</ul>
+              <ul className="lista-simples">{membros.map((x) => <li key={x.id}><Membro agente={x.tipo || "?"} tamanho={24} estado={x.estado} /> <span className={x.estado === "falhou" ? "err" : "muted"}>{rotulo(x.estado)}{ativa && x.ferramenta ? ` · ${x.ferramenta}` : ""}</span><span className="sr-only"> {membro(x.tipo).grupo.nome}</span></li>)}</ul>
             )}
           </section>
         </aside>

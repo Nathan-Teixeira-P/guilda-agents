@@ -7,6 +7,7 @@ import { Afiliados } from "./screens/Afiliados.tsx";
 import { Arsenal } from "./screens/Arsenal.tsx";
 import { EscritorioTela } from "./screens/Escritorio.tsx";
 import { Guilda } from "./screens/Guilda.tsx";
+import { Orquestra } from "./screens/Orquestra.tsx";
 import { Missao } from "./screens/Missao.tsx";
 import { Nova } from "./screens/Nova.tsx";
 import { Projetos } from "./screens/Projetos.tsx";
@@ -27,6 +28,7 @@ export function App() {
   else if (route.path === "/escritorio") tela = <EscritorioTela live={live} />;
   else if (route.path === "/quadro") tela = <Quadro live={live} />;
   else if (route.path === "/guilda") tela = <Guilda live={live} />;
+  else if (route.path === "/orquestra" || route.path.startsWith("/orquestra/")) tela = <Orquestra live={live} {...(route.path.length > 11 ? { id: decodeURIComponent(route.path.slice(11)) } : {})} />;
   else if (route.path === "/arsenal") tela = <Arsenal live={live} />;
   else if (mi) tela = <Missao key={mi[1]} id={decodeURIComponent(mi[1]!)} {...(mi[2] ? { forcada: mi[2] as "guerra" | "vivo" } : {})} live={live} />;
   else if (route.path === "/nova") tela = <Nova live={live} route={route} />;

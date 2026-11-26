@@ -1,3 +1,4 @@
+import { AjusteBox } from "../ui/AjusteBox.tsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { go } from "../router.ts";
 import { api } from "../api.ts";
@@ -99,16 +100,6 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
     go(`/missao/${encodeURIComponent(m.id)}`);
   }
 
-  const [seg, setSeg] = useState("");
-  async function continuar() {
-    if (!seg.trim()) return;
-    setBusy(true); setErro(undefined);
-    const r = await api.continuar(m.id, seg.trim());
-    setBusy(false);
-    if (!r.ok) { setErro(erroDeAcao(r)); if (r.status === 409) onChange(); return; }
-    setSeg(""); onChange();
-    go(`/missao/${encodeURIComponent(m.id)}`);
-  }
   const veredito = (
     <aside className="veredito" aria-label="Veredito">
       <h2>Veredito</h2>
@@ -211,14 +202,9 @@ export function Guerra({ m, files, carregando, live, onChange }: { m: M; files: 
         </div>
         {veredito}
       </div>
-      {m.stage === "concluida" && (m as unknown as Record<string, unknown>)["kind"] !== "redacao" && (
-        <section className="panel field" aria-labelledby="seg-t">
-          <h2 id="seg-t">Continuar esta missão</h2>
-          <p className="hint">Peça outra coisa na mesma conversa: o agente retoma a sessão e lembra do que foi feito.</p>
-          <label htmlFor="seg-c" className="sr-only">Próximo pedido</label>
-          <textarea id="seg-c" value={seg} onChange={(e) => setSeg(e.target.value)} maxLength={20000} style={{ minHeight: 90 }} />
-          <button type="button" className="btn primario" disabled={busy || !seg.trim()} onClick={continuar}>Continuar</button>
-        </section>
+      {(m.stage === "concluida" || (aguardando && feitas.length > 0)) && (m as unknown as Record<string, unknown>)["kind"] !== "redacao" && (
+        <AjusteBox id={m.id} titulo="Mandar ajuste ou bug no que já foi feito" dica={`O agente retoma a mesma conversa e lembra do que fez.${aguardando ? " Para mudar o plano do que falta, use Pedir ajustes." : ""}`}
+          onFeito={() => { onChange(); go(`/missao/${encodeURIComponent(m.id)}`); }} />
       )}
       {aguardando && mobile && (
         <div className="barra-fixa">
